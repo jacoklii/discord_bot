@@ -1,21 +1,29 @@
-# Time Imports
+# Time 
+from ast import Dict
 import time
 import datetime as dt
 from datetime import datetime, timedelta, time as dtime
-# Data imports
+from turtle import title
+# Data & API
+from pandas.core.arrays import period
 import requests
-from curl_cffi.requests import headers
 import pandas as pd
-from pandas._libs import interval
+import yfinance as yf
+# Discord
 import discord
 from discord.ext import commands, tasks
-import yfinance as yf
-# Management Imports
+# Utilities
 import pytz
+import io
 import os
 import json
-import itertools
+import itertools # for S&P 500
 from dotenv import load_dotenv
+# Visuals
+import matplotlib
+matplotlib.use('Agg')
+import mplfinance as mpf
+import matplotlib.pyplot as plt
 
 
 # --- .env & Tokens ---
@@ -185,7 +193,37 @@ def get_sp500_movers(threshold=1, batch_size=50):
         print(f'Error checking S&P 500: {e}')  
         return []
 
-# TODO: visual graphing       
+# --- Creat a Graph for a Stock ---
+def create_stock_graph(symbol, days=30):
+    # create candlestick chart for a stock
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f'{days}d')
+
+        if hist.empty:
+            return None
+
+        buf = io.BytesIO()
+
+        mpf.plot(
+            hist, 
+            type='candle',
+            style='charles',
+            title=f'{symbol} - Last {days} Days',
+            ylabel='Price ($)',
+            volume=True,
+            savefig=dict(fname=buf, dpi=150, bbox_inches='tight')
+        )
+        buf.seek(0)
+        plt.close('all')
+        return buf
+
+    except Exception as e:
+        print(f'Error creating graph for {symbol}: {e}')
+        plt.close('all')
+        return None
+
+
 # TODO: bollinger bands function
 
 
@@ -246,6 +284,24 @@ async def watchlist(ctx):
         await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}")
     else:
         await ctx.send(f'Watchlist is empty. Please use !add <symbol> to add stocks.')
+
+
+# --- Visuals for Stock ---
+# Visuals: !chart 
+@bot.command()
+async def chart(ctx, symbol, days: int=30):
+    symbol = symbol.upper()
+
+    await ctx.send(f"Generating chart for {symbol}...")
+
+    graph = create_stock_graph(symbol, days)
+
+    if graph:
+        file = discord.File(graph, filename=f'{symbol}_chart.png')
+        await ctx.send(file=file)
+
+    else:
+        await ctx.send(f"Could not generate chart for {symbol}.")
 
 
 # --- Task loops ---
