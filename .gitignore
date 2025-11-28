@@ -1,4 +1,5 @@
 # environment variables
 bot-env
-
 .env
+
+watchlist.json
