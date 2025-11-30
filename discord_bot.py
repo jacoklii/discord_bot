@@ -5,6 +5,7 @@ import datetime as dt
 from datetime import datetime, timedelta, time as dtime
 from turtle import title
 # Data & API
+from pandas._libs import interval
 from pandas.core.arrays import period
 import requests
 import pandas as pd
@@ -20,9 +21,10 @@ import json
 import itertools # for S&P 500
 from dotenv import load_dotenv
 # Visuals
+import mplfinance as mpf
+import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
-import mplfinance as mpf
 import matplotlib.pyplot as plt
 
 
@@ -65,9 +67,9 @@ STOCK_SYMBOLS = load_stocks()
 def get_stock_prices():
     # compare prices from 4 hours ago to current price
     stock_data = [] # to store the stock price data
-    for stock_symbol in STOCK_SYMBOLS:
+    for symbol in STOCK_SYMBOLS:
         try:
-            ticker = yf.Ticker(stock_symbol)
+            ticker = yf.Ticker(symbol)
             eastern = pytz.timezone('US/Eastern')
             time_now = dt.datetime.now(eastern)
 
@@ -75,7 +77,7 @@ def get_stock_prices():
             if time_now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
                 while time_now.weekday() >= 5:  # weekend
                     time_now -= timedelta(days=1)
-                print(f"Market closed for {stock_symbol}.")
+                print(f'Market Closed for {symbol}')
 
             current_price = ticker.fast_info.last_price
 
@@ -90,13 +92,13 @@ def get_stock_prices():
 
                 # add data captured to the stock data list
                 stock_data.append({
-                    'symbol': stock_symbol,
+                    'symbol': symbol,
                     'current_price': current_price,
                     'percentage_change': percentage_change,
                     'change': change
                 })
         except Exception as e:
-            print(f'Error getting data for {stock_symbol}: {e}')
+            print(f'Error getting data for {symbol}: {e}')
 
     # pass stock data to notifications
     return stock_data
@@ -193,8 +195,8 @@ def get_sp500_movers(threshold=1, batch_size=50):
         print(f'Error checking S&P 500: {e}')  
         return []
 
-# --- Creat a Graph for a Stock ---
-def create_stock_graph(symbol, days=30):
+# --- Create a Candlestick Chart for a stock ---
+def create_candlestick_graph(symbol, days=30):
     # create candlestick chart for a stock
     try:
         ticker = yf.Ticker(symbol)
@@ -222,6 +224,55 @@ def create_stock_graph(symbol, days=30):
         print(f'Error creating graph for {symbol}: {e}')
         plt.close('all')
         return None
+
+# --- Create a Chart for stock report ---
+def create_stock_graph(symbol, days, interval):
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f'{days}d',  interval=f'{interval}m')
+
+        hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
+        hist = hist[hist.index.dayofweek < 5]
+        hist = hist.between_time('9:30', '16:00')
+
+        if hist.empty:
+            return None
+        
+        hist_reset = hist.reset_index()
+
+        plt.figure(figsize=(10, 6))
+        sns.set_style('whitegrid')
+
+        ax = sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
+
+        # set custom X-axis
+        num_ticks = 6
+
+        # custom Xticks
+        tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+        tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
+        plt.xticks(tick_positions, tick_labels, fontsize=9)
+
+        plt.title(f'{symbol} Stock Price - Last {days} Days', fontsize=17, fontweight='bold')
+        plt.xlabel('Date', fontsize=11)
+        plt.ylabel('Closing Price ($)', fontsize=11)
+        plt.yticks(fontsize=9)
+        plt.tight_layout()
+
+        # Buffer
+        buf = io.BytesIO()
+
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        buf.seek(0)
+        plt.close('all')
+
+        return buf
+
+    except Exception as e:
+        print(f'Error creating graph for {symbol}: {e}')
+        plt.close('all')
+        return None
+    
 
 
 # TODO: bollinger bands function
@@ -289,12 +340,12 @@ async def watchlist(ctx):
 # --- Visuals for Stock ---
 # Visuals: !chart 
 @bot.command()
-async def chart(ctx, symbol, days: int=30):
+async def chart(ctx, symbol, days: int = 30):
     symbol = symbol.upper()
 
     await ctx.send(f"Generating chart for {symbol}...")
 
-    graph = create_stock_graph(symbol, days)
+    graph = create_candlestick_graph(symbol, days)
 
     if graph:
         file = discord.File(graph, filename=f'{symbol}_chart.png')
@@ -314,7 +365,7 @@ async def market_open_report():
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
     
-    if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 35: # only run between 9:30-9:35 AM
+    if time_now.hour != 9 or time_now.minute != 30 or time_now.minute != 35:
         return
 
     # get discord channel
@@ -334,18 +385,24 @@ async def market_open_report():
 
     if stock_data:
         # message format: embedded
-        weekday_embed = discord.Embed(
-            title='Market Open Report = 9:30 AM EST',
-            color=discord.Color.green(),
-            timestamp=dt.datetime.now(),
-            )
-        
-        weekend_embed = discord.Embed(
-            title='Weekend Market report',
-            description='Market is closed on weekends.',
-            color=discord.Color.blue(),
-            timestamp=dt.datetime.now(),
-            )
+        is_weekend = time_now.weekday() >= 5
+
+        chart_days = 7 if is_weekend else 1
+        chart_interval = 30 if is_weekend else 1
+
+        if is_weekend:
+            embed = discord.Embed(
+                title='Weekend Market Report',
+                description='Market is closed on weekends.',
+                color=discord.Color.blue(),
+                timestamp=dt.datetime.now(),
+                )
+        else:
+            embed = discord.Embed(
+                title='Market Open Report = 9:30 AM EST',
+                color=discord.Color.green(),
+                timestamp=dt.datetime.now(),
+                )
         
         # give percentage change greater than 0 or less than 0 a different color
         for stock in stock_data:
@@ -353,35 +410,38 @@ async def market_open_report():
             change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
             change_sign = "+" if stock['change'] >= 0 else ""
 
-            # fall back for weekends
-            if time_now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-                while time_now.weekday() >= 5:  # weekend
-                    time_now -= timedelta(days=1)
-
-                weekend_embed.add_field(
+            # add stock info to embed parameters
+            embed.add_field(
                 name=f"{change_emoji} {stock['symbol']}",
-                value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
-                inline=True
-                )
-                # send the weekend embed for weekends
-                await channel.send(embed=weekend_embed)
-                return
-            
-            # adding stock info to embed parameters
-            weekday_embed.add_field(
-                name=f"{star} {change_emoji} {stock['symbol']}",
                 value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
                 inline=True
             )
 
-        # sending the embed through the message type
-        await channel.send(embed=weekday_embed)
+        # send Graphs for each chart
+        files = []
+        for stock in stock_data:
+            graph = create_stock_graph(stock['symbol'], days=chart_days, interval=chart_interval)
+            if graph:
+                files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
+
+        # send embed through the message type, send all charts at once
+        if files:
+            await channel.send(embed=embed, files=files)
+        else:
+            await channel.send(embed=embed)
+            await channel.send(f"Could not generate charts for {', '.join(stock)}.")
+
     else:
         await channel.send('Could not get stock prices/data')
 
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
 async def check_big_changes():
+
+    # Checks if weekend - Doesn't run on weekends
+    time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
+    if time_now.weekday() >= 5:
+        return
 
     print(f"[{datetime.now()}] Checking for big changes...") # terminal print to check if bot is running properly
 
@@ -395,6 +455,8 @@ async def check_big_changes():
 
     # statement to detect if big changes is True
     if big_changes:
+        print("Big price changes found.") # Terminal print
+
         symbols = ', '.join(stock['symbol'] for stock in big_changes)
         embed = discord.Embed(
             title=f"ALERT: Big Price Movement for {symbols}",
@@ -412,7 +474,8 @@ async def check_big_changes():
                 inline=True
                 )
         await channel.send(embed=embed)
-
+    else:
+        print("Big price changes not found.") # Terminal print
 
 
 # sending waiting until bot is connected before running to avoid errors and return nothing   
