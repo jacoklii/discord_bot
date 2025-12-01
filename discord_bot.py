@@ -196,11 +196,11 @@ def get_sp500_movers(threshold=1, batch_size=50):
         return []
 
 # --- Create a Candlestick Chart for a stock ---
-def create_candlestick_graph(symbol, days=30):
+def create_candlestick_graph(symbol, days, interval):
     # create candlestick chart for a stock
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f'{days}d')
+        hist = ticker.history(period=f'{days}d', interval=f'{interval}')
 
         if hist.empty:
             return None
@@ -229,6 +229,7 @@ def create_candlestick_graph(symbol, days=30):
 def create_stock_graph(symbol, days, interval):
     try:
         ticker = yf.Ticker(symbol)
+
         hist = ticker.history(period=f'{days}d',  interval=f'{interval}m')
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
@@ -245,12 +246,19 @@ def create_stock_graph(symbol, days, interval):
 
         ax = sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
 
-        # set custom X-axis
-        num_ticks = 6
-
+        
         # custom Xticks
-        tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-        tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
+        if days >= 7:
+            # daily for each day of the week
+            num_ticks = 7
+            tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+            tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
+        else:
+            # hourly ticks from 9:30 to 4:00
+            num_ticks = 8
+            tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+            tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%H:%M') for i in tick_positions]
+
         plt.xticks(tick_positions, tick_labels, fontsize=9)
 
         plt.title(f'{symbol} Stock Price - Last {days} Days', fontsize=17, fontweight='bold')
@@ -340,12 +348,12 @@ async def watchlist(ctx):
 # --- Visuals for Stock ---
 # Visuals: !chart 
 @bot.command()
-async def chart(ctx, symbol, days: int = 30):
+async def chart(ctx, symbol, days, interval):
     symbol = symbol.upper()
 
     await ctx.send(f"Generating chart for {symbol}...")
 
-    graph = create_candlestick_graph(symbol, days)
+    graph = create_candlestick_graph(symbol, days, interval)
 
     if graph:
         file = discord.File(graph, filename=f'{symbol}_chart.png')
@@ -388,7 +396,7 @@ async def market_open_report():
         is_weekend = time_now.weekday() >= 5
 
         chart_days = 7 if is_weekend else 1
-        chart_interval = 30 if is_weekend else 1
+        chart_interval = 30 if is_weekend else 5
 
         if is_weekend:
             embed = discord.Embed(
