@@ -211,7 +211,7 @@ def create_candlestick_graph(symbol, days, interval):
             hist, 
             type='candle',
             style='charles',
-            title=f'{symbol} - Last {days} Days',
+            title=f"{symbol} - Last {days} Day{'s' if days != 1 else ''}",
             ylabel='Price ($)',
             volume=True,
             savefig=dict(fname=buf, dpi=150, bbox_inches='tight')
@@ -261,7 +261,7 @@ def create_stock_graph(symbol, days, interval):
 
         plt.xticks(tick_positions, tick_labels, fontsize=9)
 
-        plt.title(f'{symbol} Stock Price - Last {days} Days', fontsize=17, fontweight='bold')
+        plt.title(f'{symbol} Stock Price - Last {days} Day{'s' if days != 1 else ''}', fontsize=17, fontweight='bold')
         plt.xlabel('Date', fontsize=11)
         plt.ylabel('Closing Price ($)', fontsize=11)
         plt.yticks(fontsize=9)
@@ -373,7 +373,7 @@ async def market_open_report():
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
     
-    if time_now.hour != 9 or time_now.minute != 30 or time_now.minute != 35:
+    if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 35:
         return
 
     # get discord channel
@@ -428,7 +428,7 @@ async def market_open_report():
         # send Graphs for each chart
         files = []
         for stock in stock_data:
-            graph = create_stock_graph(stock['symbol'], days=chart_days, interval=chart_interval)
+            graph = create_candlestick_graph(stock['symbol'], days=chart_days, interval=f'{chart_interval}m')
             if graph:
                 files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
 
