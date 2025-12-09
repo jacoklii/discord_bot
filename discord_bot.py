@@ -375,7 +375,6 @@ async def market_open_report():
     
     if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 35:
         return
-
     # get discord channel
     channel = bot.get_channel(CHANNEL_ID)
 
@@ -420,7 +419,7 @@ async def market_open_report():
 
             # add stock info to embed parameters
             embed.add_field(
-                name=f"{change_emoji} {stock['symbol']}",
+                name=f"{star} {change_emoji} {stock['symbol']}",
                 value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
                 inline=True
             )
