@@ -376,7 +376,7 @@ async def chart(ctx, symbol, days, interval):
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=10)
 async def market_open_report():
     """send stock notifications to the channel"""
 
@@ -520,7 +520,7 @@ async def sp500_movers_alert():
         print(f'Channel {CHANNEL_ID} not found') # error if channel ID doesnt exist
         return
     
-    sp_movers = get_sp500_movers(threshold=2, batch_size=50)
+    sp_movers = get_sp500_movers(percent_threshold=2, batch_size=50)
 
     if sp_movers:
         symbols = ', '.join(stock['symbol'] for stock in sp_movers)
