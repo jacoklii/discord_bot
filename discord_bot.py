@@ -61,49 +61,55 @@ def save_stocks(stocks):
 STOCK_SYMBOLS = load_stocks()
 
 
+# --- FUNCTIONS: Prices ---
+def get_stock_prices(compare_to='previous_close'):
+    # compare prices from last close to current price
+    stock_data = [] # store stock price data
 
-# --- FUNCTIONS ---
-# --- Get Stock Price Data ---
-def get_stock_prices():
-    # compare prices from 4 hours ago to current price
-    stock_data = [] # to store the stock price data
+    tickers = yf.Tickers(' '.join(STOCK_SYMBOLS))
+
     for symbol in STOCK_SYMBOLS:
         try:
-            ticker = yf.Ticker(symbol)
-            eastern = pytz.timezone('US/Eastern')
-            time_now = dt.datetime.now(eastern)
-
-            # fall back statement to get the updates on weekends
-            if time_now.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-                while time_now.weekday() >= 5:  # weekend
-                    time_now -= timedelta(days=1)
-                print(f'Market Closed for {symbol}')
-
+            ticker = tickers.tickers[symbol]
             current_price = ticker.fast_info.last_price
 
-            # get yesterdays price
-            hist = ticker.history(period='5d')
-            if not hist.empty and len(hist) >= 2:
-                # get most recent previous close from yesterday
-                prev_close = hist['Close'].iloc[-2]
+            # get reference price on monday for week start comparison
+            if compare_to == 'week_start':
+                hist = ticker.history(period='5d')
+                hist = hist.tz_convert('US/Eastern')
+                hist = hist[hist.index.dayofweek == 0]
+                hist = hist.between_time('9:30', '9:35')
 
-                change = current_price - prev_close
-                percentage_change = ((current_price - prev_close) / prev_close) * 100
+                if not hist.empty:
+                    reference_price = hist['Close'].iloc[0]
+                else:
+                    hist = ticker.history(period='5d')
+                    reference_price = hist['Close'].iloc[-2]
+            
+            # default to get yesterdays price
+            else:
+                hist = ticker.history(period='5d')
+                if not hist.empty and len(hist) >= 2:
+                    reference_price = hist['Close'].iloc[-2]
+                else:
+                    continue
 
-                # add data captured to the stock data list
-                stock_data.append({
-                    'symbol': symbol,
-                    'current_price': current_price,
-                    'percentage_change': percentage_change,
-                    'change': change
-                })
+            change = current_price - reference_price
+            percentage_change = ((current_price - reference_price) / reference_price) * 100
+
+            # add data captured to the stock data list
+            stock_data.append({
+                'symbol': symbol,
+                'current_price': current_price,
+                'percentage_change': percentage_change,
+                'change': change
+            })
+        
         except Exception as e:
             print(f'Error getting data for {symbol}: {e}')
 
-    # pass stock data to notifications
     return stock_data
 
-# --- Check price changes command ---
 def check_price_changes():
     big_changes = []
     for symbol in STOCK_SYMBOLS:
@@ -137,7 +143,6 @@ def check_price_changes():
     # pass big changes
     return big_changes
 
-# --- S&P 500 Alerts Function ---
 sp500_cycle = None
 def get_sp500_movers(percent_threshold=2, batch_size=50):
 
@@ -186,8 +191,8 @@ def get_sp500_movers(percent_threshold=2, batch_size=50):
                     # checks if price of the stock is equal to current price for storing reference for next comparison
                     sp500_last_checked_prices[symbol] = current_price
 
-                except Exception as e:
-                    print(f'Error getting data for {symbol}: {e}')
+                except:
+                    continue
 
         # pass big changes
         return big_movers
@@ -196,22 +201,29 @@ def get_sp500_movers(percent_threshold=2, batch_size=50):
         print(f'Error checking S&P 500: {e}')  
         return []
 
-# --- Create a Candlestick Chart for a stock ---
-def create_candlestick_graph(symbol, days, interval, filter_hours=True):
-    # create candlestick chart for a stock
+
+# --- FUNCTIONS: Visuals ---
+def create_candlestick_graph(symbol, days, interval, after_hours=False):
+    """ 
+    Create a Candlestick Chart for a stock
+    """
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f'{days}d', interval=f'{interval}')
+        hist = ticker.history(period=f'{days}', interval=f'{interval}', prepost=True)
 
-        hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
-            
-        if filter_hours:   
-            hist = hist[hist.index.dayofweek < 5]
+        hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs          
+        hist = hist[hist.index.dayofweek < 5]
+
+        # filter hours
+        if not after_hours:
             hist = hist.between_time('9:30', '16:00')
+        else:
+            hist = hist.between_time('4:00', '20:00')
 
         if hist.empty:
             return None
-        
+
+        # remove gaps by resetting index
         hist_reset = hist.reset_index()
 
         buf = io.BytesIO()
@@ -222,9 +234,9 @@ def create_candlestick_graph(symbol, days, interval, filter_hours=True):
             style='charles',
             title=f"{symbol} - Last {days} Day{'s' if days != 1 else ''}",
             ylabel='Price ($)',
-            volume=True,
             savefig=dict(fname=buf, dpi=150, bbox_inches='tight')
         )
+
         buf.seek(0)
         plt.close('all')
         return buf
@@ -234,8 +246,10 @@ def create_candlestick_graph(symbol, days, interval, filter_hours=True):
         plt.close('all')
         return None
 
-# --- Create a Chart for stock report ---
 def create_stock_graph(symbol, days, interval, filter_hours=True):
+    """
+    Create a Chart for stock report
+    """
     try:
         ticker = yf.Ticker(symbol)
 
@@ -290,9 +304,18 @@ def create_stock_graph(symbol, days, interval, filter_hours=True):
         print(f'Error creating graph for {symbol}: {e}')
         plt.close('all')
         return None
-    
 
-# TODO: bollinger bands function
+def calculate_bollinger_bands(data, window=20, num_of_std=2):
+    """
+    Calculate Bollinger Bands for a stock
+    """
+    rolling_mean = data['Close'].rolling(window=window).mean()
+    rolling_std = data['Close'].rolling(window=window).std()
+
+    upper_band = rolling_mean + (rolling_std * num_of_std)
+    lower_band = rolling_mean - (rolling_std * num_of_std)
+
+    return rolling_mean, upper_band, lower_band
 
 
 # --- BOT EVENT ---
@@ -350,10 +373,33 @@ async def remove(ctx, stock):
 # manage stocks: !Watchlist
 @bot.command()
 async def watchlist(ctx):
-    if STOCK_SYMBOLS:
-        await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}")
-    else:
+    if not STOCK_SYMBOLS:
         await ctx.send(f'Watchlist is empty. Please use !add <symbol> to add stocks.')
+        return
+
+    stock_data = get_stock_prices()
+
+    if stock_data:
+        embed = discord.Embed(
+            title='Watchlist Prices',
+            color=discord.Color.blue(),
+            )
+    
+        # give percentage change greater than 0 or less than 0 a different color
+        for stock in stock_data:
+            star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
+            change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
+            change_sign = "+" if stock['change'] >= 0 else ""
+
+            # add stock info to embed parameters
+            embed.add_field(
+                name=f"{star} {change_emoji} {stock['symbol']}",
+                value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
+                inline=True
+            )
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}.\n Could not get stock prices/data.")
 
 
 # --- Visuals for Stocks ---
@@ -364,7 +410,7 @@ async def chart(ctx, symbol, days, interval):
 
     await ctx.send(f"Generating chart for {symbol}...")
 
-    graph = create_candlestick_graph(symbol, days, interval)
+    graph = create_candlestick_graph(symbol, days, interval, after_hours=True)
 
     if graph:
         file = discord.File(graph, filename=f'{symbol}_chart.png')
@@ -401,12 +447,11 @@ async def market_open_report():
         await channel.send('No stocks in watchlist.')
         return
 
-    stock_data = get_stock_prices()
+    is_weekend = time_now.weekday() >= 5
+    stock_data = get_stock_prices(compare_to='week_start' if is_weekend else 'previous_close')
 
     if stock_data:
-        # message format: embedded
-        is_weekend = time_now.weekday() >= 5
-
+        # message format: embed
         if is_weekend:
             embed = discord.Embed(
                 title='Weekend Market Report',
@@ -438,11 +483,11 @@ async def market_open_report():
         files = []
         for stock in stock_data:
             if is_weekend:
-                graph = create_candlestick_graph(stock['symbol'], days=5, interval='30m', filter_hours=False)
+                graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
             elif time_now.weekday() == 0: # Monday: get the last time market was open (Friday) for reference
-                graph = create_candlestick_graph(stock['symbol'], days=3, interval='5m', filter_hours=True)
+                graph = create_candlestick_graph(stock['symbol'], days='3d', interval='5m', after_hours=False)
             else: # get the last time market was open (Tuesday - Friday) for reference
-                graph = create_candlestick_graph(stock['symbol'], days=2, interval='5m', filter_hours=True)
+                graph = create_candlestick_graph(stock['symbol'], days='2d', interval='5m', after_hours=False)
 
             if graph:
                 files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
@@ -456,6 +501,7 @@ async def market_open_report():
             await channel.send(f"Could not generate charts for {', '.join(failed_symbols)}")
     else:
         await channel.send('Could not get stock prices/data')
+
 
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
@@ -503,15 +549,16 @@ async def check_big_changes():
     else:
         print("Big price changes not found.") # Terminal print
 
+
 # Send S&P 500 Movers Alerts
 @tasks.loop(minutes=10)
 async def sp500_movers_alert():
-     # Checks if weekend - Doesn't run on weekends
+    # Checks if weekend - Doesn't run on weekends
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
     if time_now.weekday() >= 5:
         return
     
-    if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour > 16:
+    if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour >= 16:
         return
     
     # tells bot which channel to send the message to 
@@ -523,10 +570,11 @@ async def sp500_movers_alert():
     sp_movers = get_sp500_movers(percent_threshold=2, batch_size=50)
 
     if sp_movers:
-        symbols = ', '.join(stock['symbol'] for stock in sp_movers)
+        print("S&P 500 Big price movers found.") # Terminal print
 
+        symbols = ', '.join(stock['symbol'] for stock in sp_movers[:5])
         embed = discord.Embed(
-            title= f'S&P 500 ALERT: Big Price Movement for {symbols}',
+            title= f'S&P 500 ALERT: Big Price Movement for {symbols}{'...' if len(sp_movers) > 5 else ''}',
             color=discord.Color.red(),
             timestamp=datetime.now(),
         )
@@ -540,11 +588,11 @@ async def sp500_movers_alert():
                 value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
                 inline=True
                 )
-            
-        
+
         await channel.send(embed=embed)
 
-# sending waiting until bot is connected before running to avoid errors and return nothing   
+
+# wait until bot is ready  
 @check_big_changes.before_loop
 async def before_check_big_prices():
     await bot.wait_until_ready()
@@ -556,6 +604,5 @@ async def before_send_stock_prices():
 sp500_movers_alert.before_loop
 async def before_send_sp500_alert():
     await bot.wait_until_ready()
-
 
 bot.run(discord_token)
