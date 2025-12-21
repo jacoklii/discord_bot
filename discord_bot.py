@@ -66,33 +66,36 @@ def get_stock_prices(compare_to='previous_close'):
     # compare prices from last close to current price
     stock_data = [] # store stock price data
 
-    tickers = yf.Tickers(' '.join(STOCK_SYMBOLS))
+    symbols = ' '.join(STOCK_SYMBOLS)
+    data = yf.download(symbols, period = '5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
 
     for symbol in STOCK_SYMBOLS:
         try:
-            ticker = tickers.tickers[symbol]
+            ticker = yf.Ticker(symbol)
             current_price = ticker.fast_info.last_price
+
+            if len(STOCK_SYMBOLS) == 1:
+                hist = data
+            else:
+                hist = data[symbol]
+            
+            if hist.empty or len(hist) < 2:
+                continue
 
             # get reference price on monday for week start comparison
             if compare_to == 'week_start':
-                hist = ticker.history(period='5d')
-                hist = hist.tz_convert('US/Eastern')
-                hist = hist[hist.index.dayofweek == 0]
-                hist = hist.between_time('9:30', '9:35')
-
-                if not hist.empty:
-                    reference_price = hist['Close'].iloc[0]
+                hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False)
+                hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
+                
+                if not hist_5m.empty:
+                    reference_price = hist_5m['Close'].iloc[0]
+                # quick fallback if market was closed on monday
                 else:
-                    hist = ticker.history(period='5d')
                     reference_price = hist['Close'].iloc[-2]
-            
+
             # default to get yesterdays price
             else:
-                hist = ticker.history(period='5d')
-                if not hist.empty and len(hist) >= 2:
-                    reference_price = hist['Close'].iloc[-2]
-                else:
-                    continue
+                reference_price = hist['Close'].iloc[-2]
 
             change = current_price - reference_price
             percentage_change = ((current_price - reference_price) / reference_price) * 100
@@ -384,19 +387,13 @@ async def watchlist(ctx):
             title='Watchlist Prices',
             color=discord.Color.blue(),
             )
-    
-        # give percentage change greater than 0 or less than 0 a different color
+ 
         for stock in stock_data:
-            star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
-            change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
-            change_sign = "+" if stock['change'] >= 0 else ""
-
-            # add stock info to embed parameters
             embed.add_field(
-                name=f"{star} {change_emoji} {stock['symbol']}",
-                value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
-                inline=True
+                name=f"{stock['symbol']}",
+                value=f'${stock["current_price"]:.2f}'
             )
+
         await ctx.send(embed=embed)
     else:
         await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}.\n Could not get stock prices/data.")
