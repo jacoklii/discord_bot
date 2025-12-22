@@ -1,12 +1,8 @@
 # Time 
-from ast import Dict
 import time
 import datetime as dt
-from datetime import datetime, timedelta, time as dtime
-from turtle import title
+from datetime import datetime, timedelta 
 # Data & API
-from pandas._libs import interval
-from pandas.core.arrays import period
 import requests
 import pandas as pd
 import yfinance as yf
