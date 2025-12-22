@@ -41,8 +41,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # --- Channel ID & Stock Symbols ---
 CHANNEL_ID = 1435810254783778933
 STOCK_FILE = 'watchlist.json'
+
 last_checked_prices = {}
 sp500_last_checked_prices = {}
+
 
 # --- file management for stocks ---
 def load_stocks():
@@ -128,7 +130,7 @@ def check_price_changes():
 
                 percentage_change = ((current_price - last_price) / last_price) * 100
 
-                # checks the pecent change if the absolute value is greater than 4
+                # checks the pecent change if the absolute value is greater than 1
                 if abs(percentage_change) >= 1:
                     # add stock data to big_changes list
                     big_changes.append({
@@ -147,7 +149,7 @@ def check_price_changes():
     return big_changes
 
 sp500_cycle = None
-def get_sp500_movers(percent_threshold=2, batch_size=50):
+def get_sp500_movers(percent_threshold=1, batch_size=50):
 
     global sp500_cycle
 
@@ -158,8 +160,7 @@ def get_sp500_movers(percent_threshold=2, batch_size=50):
         response.raise_for_status()
 
         lines = response.text.strip().split('\n')
-        headers = lines[0].split(',')
-
+        # headers = lines[0].split(',')
         sp500_symbols = [line.split(',')[0] for line in lines[1:]]
 
         if sp500_cycle is None:
@@ -167,23 +168,19 @@ def get_sp500_movers(percent_threshold=2, batch_size=50):
 
         batch = [next(sp500_cycle) for _ in range(batch_size)]
         big_movers = []
-
         for symbol in batch:
-            if symbol not in STOCK_SYMBOLS: #checks if s&p 500 symbol isn't in watchlist
+            if symbol not in STOCK_SYMBOLS: #checks if s&p 500 symbol isn't already in watchlist
                 try:
-                    #get the ticker symbols
                     ticker = yf.Ticker(symbol)
-                    #get the last price/current price
-                    current_price = ticker.fast_info.last_price
 
-                    # check if stock symbol is in last checked prices to move on with the function
                     if symbol in sp500_last_checked_prices:
                         last_price = sp500_last_checked_prices[symbol] # gets the last checked price and compares percentage to it
                         percentage_change = ((current_price - last_price) / last_price) * 100
 
-                        # checks the pecent change if the absolute value is greater than 4
+                        # checks the pecent change if the absolute value is greater than threshold
                         if abs(percentage_change) >= percent_threshold:
-                            # add stock data to big_changes list
+                            current_price = ticker.fast_info.last_price
+
                             big_movers.append({
                                 'symbol': symbol,
                                 'current_price': current_price,
@@ -191,19 +188,20 @@ def get_sp500_movers(percent_threshold=2, batch_size=50):
                                 'percentage_change': percentage_change,
                             })
 
-                    # checks if price of the stock is equal to current price for storing reference for next comparison
+                    # updates last checked price for next comparison
                     sp500_last_checked_prices[symbol] = current_price
 
                 except:
                     continue
+            else:
+                continue
 
-        # pass big changes
+        # pass big movers
         return big_movers
 
     except Exception as e:
         print(f'Error checking S&P 500: {e}')  
         return []
-
 
 # --- FUNCTIONS: Visuals ---
 def create_candlestick_graph(symbol, days, interval, after_hours=False):
@@ -426,10 +424,10 @@ async def market_open_report():
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
 
-    # if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 40:
-    #     return
+    if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 40:
+        return
 
-    print(f"[{datetime.now()}] Sending market open report...") # terminal print to check if bot is running properly
+    print(f"[{datetime.now()}] Sending market open report...")
 
     channel = bot.get_channel(CHANNEL_ID)
 
@@ -481,9 +479,9 @@ async def market_open_report():
             if abs(stock['percentage_change']) >= 1:
                 if is_weekend:
                     graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
-                elif time_now.weekday() == 0: # Monday: get the last time market was open (Friday) for reference
+                elif time_now.weekday() == 0: # Monday: last market open (Friday) for reference
                     graph = create_candlestick_graph(stock['symbol'], days='3d', interval='5m', after_hours=True)
-                else: # get the last time market was open (Tuesday - Friday) for reference
+                else: # last market open (Tuesday - Friday) for reference
                     graph = create_candlestick_graph(stock['symbol'], days='2d', interval='5m', after_hours=False)
 
                 if graph:
@@ -504,27 +502,24 @@ async def market_open_report():
 @tasks.loop(minutes=5)
 async def check_big_changes():
 
-    # Checks if weekend - Doesn't run on weekends
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
     if time_now.weekday() >= 5:
         return
-    
     if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour > 16:
         return
 
-    print(f"[{datetime.now()}] Checking for big changes...") # terminal print to check if bot is running properly
+    print(f"[{datetime.now()}] WATCHLIST: Checking for big changes...")
 
-    # tells bot which channel to send the message to 
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print(f'Channel {CHANNEL_ID} not found') # error if channel ID doesnt exist
+        print(f'Channel {CHANNEL_ID} not found')
         return
 
     big_changes = check_price_changes()
 
     # statement to detect if big changes is True
     if big_changes:
-        print("Big price changes found.") # Terminal print
+        print("WATCHLIST: Big price changes found.")
 
         symbols = ', '.join(stock['symbol'] for stock in big_changes)
         embed = discord.Embed(
@@ -544,30 +539,30 @@ async def check_big_changes():
                 )
         await channel.send(embed=embed)
     else:
-        print("Big price changes not found.") # Terminal print
+        print("WATCHLIST: Big price changes not found.")
 
 
 # Send S&P 500 Movers Alerts
 @tasks.loop(minutes=10)
 async def sp500_movers_alert():
-    # Checks if weekend - Doesn't run on weekends
+
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
     if time_now.weekday() >= 5:
         return
-    
     if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour >= 16:
         return
-    
-    # tells bot which channel to send the message to 
+
+    print(f"[{datetime.now()}] S&P 500: Checking for big changes...")
+
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print(f'Channel {CHANNEL_ID} not found') # error if channel ID doesnt exist
+        print(f'Channel {CHANNEL_ID} not found')
         return
     
-    sp_movers = get_sp500_movers(percent_threshold=2, batch_size=50)
+    sp_movers = get_sp500_movers(percent_threshold=1, batch_size=50)
 
     if sp_movers:
-        print("S&P 500 Big price movers found.") # Terminal print
+        print("S&P 500 Big price movers found.")
 
         symbols = ', '.join(stock['symbol'] for stock in sp_movers[:5])
         embed = discord.Embed(
@@ -585,9 +580,10 @@ async def sp500_movers_alert():
                 value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
                 inline=True
                 )
-
         await channel.send(embed=embed)
 
+    else:
+        print("S&P 500: Big price changes not found.")
 
 # wait until bot is ready  
 @check_big_changes.before_loop
