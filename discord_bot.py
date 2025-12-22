@@ -219,9 +219,6 @@ def create_candlestick_graph(symbol, days, interval, after_hours=False):
         if hist.empty:
             return None
 
-        # remove gaps by resetting index
-        hist_reset = hist.reset_index()
-
         buf = io.BytesIO()
 
         mpf.plot(
@@ -252,7 +249,7 @@ def create_stock_graph(symbol, days, interval, after_hours=True):
         hist = ticker.history(period=f'{days}d', interval=f'{interval}m')
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
-        hist = hist[hist.index.dayofweek < 5]
+        hist = hist[hist.index.dayofweek < 5] # remove weekends
 
         # filter hours
         if not after_hours:
@@ -262,25 +259,23 @@ def create_stock_graph(symbol, days, interval, after_hours=True):
 
         if hist.empty:
             return None
-        
-        hist_reset = hist.reset_index()
 
         plt.figure(figsize=(10, 6))
         sns.set_style('whitegrid')
 
-        ax = sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
+        ax = sns.lineplot(data=hist, x=range(len(hist)), y='Close', linewidth=1.5)
 
         # custom Xticks
         if days >= 7:
             # daily for each day of the week
             num_ticks = 5
-            tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-            tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
+            tick_positions = [int(i * (len(hist) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+            tick_labels = [hist['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
         else:
             # hourly ticks from 9:30 to 4:00
             num_ticks = 8
-            tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-            tick_labels = [hist_reset['Datetime'].iloc[i].strftime('%H:%M') for i in tick_positions]
+            tick_positions = [int(i * (len(hist) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+            tick_labels = [hist['Datetime'].iloc[i].strftime('%H:%M') for i in tick_positions]
 
         plt.xticks(tick_positions, tick_labels, fontsize=9)
 
