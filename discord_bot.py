@@ -58,7 +58,6 @@ def save_stocks(stocks):
 
 STOCK_SYMBOLS = load_stocks()
 
-
 # --- FUNCTIONS: Prices ---
 def get_stock_prices(compare_to='previous_close'):
     # compare prices from last close to current price
@@ -243,7 +242,7 @@ def create_candlestick_graph(symbol, days, interval, after_hours=False):
         plt.close('all')
         return None
 
-def create_stock_graph(symbol, days, interval, filter_hours=True):
+def create_stock_graph(symbol, days, interval, after_hours=True):
     """
     Create a Chart for stock report
     """
@@ -253,10 +252,13 @@ def create_stock_graph(symbol, days, interval, filter_hours=True):
         hist = ticker.history(period=f'{days}d', interval=f'{interval}m')
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
-            
-        if filter_hours:   
-            hist = hist[hist.index.dayofweek < 5]
+        hist = hist[hist.index.dayofweek < 5]
+
+        # filter hours
+        if not after_hours:
             hist = hist.between_time('9:30', '16:00')
+        else:
+            hist = hist.between_time('4:00', '20:00')
 
         if hist.empty:
             return None
