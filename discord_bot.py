@@ -86,7 +86,7 @@ def get_stock_prices(compare_to='previous_close'):
             if compare_to == 'week_start':
                 hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False)
                 hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
-                
+
                 if not hist_5m.empty:
                     reference_price = hist_5m['Close'].iloc[0]
                 # quick fallback if market was closed on monday
@@ -237,7 +237,7 @@ def create_candlestick_graph(symbol, days, interval, after_hours=False):
             style='charles',
             title=f"{symbol} - Last {days} Day{'s' if days != 1 else ''}",
             ylabel='Price ($)',
-            savefig=dict(fname=buf, dpi=150, bbox_inches='tight')
+            savefig=dict(fname=buf, dpi=100, bbox_inches='tight')
         )
 
         buf.seek(0)
@@ -347,7 +347,6 @@ async def current_price(ctx):
         todays_price = ticker.fast_info.last_price
         await ctx.send(f'The current price of {stock_symbol} is ${todays_price:.2f}')
 
-
 # --- Manage Stocks Commands ---
 # manage stocks: !add
 @bot.command()
@@ -419,7 +418,7 @@ async def chart(ctx, symbol, days, interval):
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=5)
 async def market_open_report():
     """send stock notifications to the channel"""
 
@@ -427,8 +426,8 @@ async def market_open_report():
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
 
-    if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 40:
-        return
+    # if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 40:
+    #     return
 
     print(f"[{datetime.now()}] Sending market open report...") # terminal print to check if bot is running properly
 
@@ -479,15 +478,16 @@ async def market_open_report():
         # send Graphs for each chart
         files = []
         for stock in stock_data:
-            if is_weekend:
-                graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
-            elif time_now.weekday() == 0: # Monday: get the last time market was open (Friday) for reference
-                graph = create_candlestick_graph(stock['symbol'], days='3d', interval='5m', after_hours=False)
-            else: # get the last time market was open (Tuesday - Friday) for reference
-                graph = create_candlestick_graph(stock['symbol'], days='2d', interval='5m', after_hours=False)
+            if abs(stock['percentage_change']) >= 1:
+                if is_weekend:
+                    graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
+                elif time_now.weekday() == 0: # Monday: get the last time market was open (Friday) for reference
+                    graph = create_candlestick_graph(stock['symbol'], days='3d', interval='5m', after_hours=True)
+                else: # get the last time market was open (Tuesday - Friday) for reference
+                    graph = create_candlestick_graph(stock['symbol'], days='2d', interval='5m', after_hours=False)
 
-            if graph:
-                files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
+                if graph:
+                    files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
 
         # send embed through the message type, send all charts at once
         if files:
