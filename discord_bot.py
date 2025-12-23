@@ -1,7 +1,7 @@
 # Time 
 import time
 import datetime as dt
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta
 # Data & API
 import requests
 import pandas as pd
@@ -57,6 +57,7 @@ def save_stocks(stocks):
         json.dump({'symbols': stocks}, f, indent=2)
 
 STOCK_SYMBOLS = load_stocks()
+
 
 # --- FUNCTIONS: Prices ---
 def get_stock_prices(compare_to='previous_close'):
@@ -388,7 +389,6 @@ async def watchlist(ctx):
     else:
         await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}.\n Could not get stock prices/data.")
 
-
 # --- Visuals for Stocks ---
 # Visuals: !chart 
 @bot.command()
@@ -409,16 +409,14 @@ async def chart(ctx, symbol, days, interval):
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
-@tasks.loop(minutes=5)
+report_time = dt.time(hour=9, minute=30, tzinfo=pytz.timezone('US/Eastern'))
+@tasks.loop(time=report_time)
 async def market_open_report():
     """send stock notifications to the channel"""
 
-    # timezones
+    # timezone
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
-
-    if time_now.hour != 9 or time_now.minute < 30 or time_now.minute >= 40:
-        return
 
     print(f"[{datetime.now()}] Sending market open report...")
 
@@ -473,9 +471,9 @@ async def market_open_report():
                 if is_weekend:
                     graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
                 elif time_now.weekday() == 0: # Monday: last market open (Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], days='3d', interval='5m', after_hours=True)
+                    graph = create_candlestick_graph(stock['symbol'], days='3d', interval='15m', after_hours=True)
                 else: # last market open (Tuesday - Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], days='2d', interval='5m', after_hours=False)
+                    graph = create_candlestick_graph(stock['symbol'], days='2d', interval='15m', after_hours=True)
 
                 if graph:
                     files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
@@ -489,7 +487,6 @@ async def market_open_report():
             await channel.send(f"Could not generate charts for {', '.join(failed_symbols)}")
     else:
         await channel.send('Could not get stock prices/data')
-
 
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
@@ -534,9 +531,8 @@ async def check_big_changes():
     else:
         print("WATCHLIST: Big price changes not found.")
 
-
 # Send S&P 500 Movers Alerts
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=5)
 async def sp500_movers_alert():
 
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
@@ -578,7 +574,8 @@ async def sp500_movers_alert():
     else:
         print("S&P 500: Big price changes not found.")
 
-# wait until bot is ready  
+
+# wait until bot is ready
 @check_big_changes.before_loop
 async def before_check_big_prices():
     await bot.wait_until_ready()
