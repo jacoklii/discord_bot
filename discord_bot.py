@@ -313,17 +313,64 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
         plt.close('all')
         return None
 
-def calculate_bollinger_bands(data, window=20, num_of_std=2):
+def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_of_std=2):
     """
     Calculate Bollinger Bands for a stock
     """
-    rolling_mean = data['Close'].rolling(window=window).mean()
-    rolling_std = data['Close'].rolling(window=window).std()
 
-    upper_band = rolling_mean + (rolling_std * num_of_std)
-    lower_band = rolling_mean - (rolling_std * num_of_std)
+    try:
+        ticker = yf.Ticker(symbol)
 
-    return rolling_mean, upper_band, lower_band
+        hist = ticker.history(period=period, interval=interval, prepost=True)
+
+        hist = hist.tz_convert('US/Eastern')
+        hist = hist[hist.index.dayofweek < 5]
+
+        rolling_mean = hist['Close'].rolling(window=window).mean()
+        rolling_std = hist['Close'].rolling(window=window).std()
+
+        upper_band = rolling_mean + (rolling_std * num_of_std)
+        lower_band = rolling_mean - (rolling_std * num_of_std)
+
+        df = pd.DataFrame({
+            'Close': hist['Close'],
+            'Middle_Band': rolling_mean,
+            'Upper_Band': upper_band,
+            'Lower_Band': lower_band
+        }).dropna()
+
+        df_reset = df.reset_index()
+        df_reset = df_reset.rename(columns={df_reset.columns[0]: 'Date'})
+
+        plt.figure(figsize=(10, 6))
+        sns.set_style('whitegrid')
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Close', label=f'{symbol} Close Price', color='blue')
+
+        # Bollinger Bands
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Middle_Band', label='Middle Band', color='orange')
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Upper_Band', label='Upper Band', color='red')
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Lower_Band', label='Lower Band', color='red')
+
+        plt.title(f'Bollinger Bands - {symbol} Stock Price - Last {period}', fontsize=17, fontweight='bold')
+        plt.xlabel('Date', fontsize=11)
+        plt.ylabel('Price ($)', fontsize=11)
+        plt.yticks(fontsize=9)
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+
+        # Buffer
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        buf.seek(0)
+        plt.close('all')
+
+        return buf
+
+    except Exception as e:
+        print(f'Error creating graph for {symbol}: {e}')
+        plt.close('all')
+        return None
 
 
 # --- BOT EVENT ---
@@ -430,6 +477,22 @@ async def chart(ctx, symbol, period, interval):
     
     except Exception as e:
         await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
+
+@bot.command()
+async def bollinger(ctx, symbol, period='1mo', interval='1d'):
+    symbol = symbol.upper()
+
+    await ctx.send(f"Generating Bollinger chart for {symbol}...")
+
+    graph = create_bollinger_bands(symbol, period, interval)
+    chart_type = 'bollinger_bands'
+
+    if graph:
+        file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
+        await ctx.send(file=file)
+    else:
+        await ctx.send(f"Could not generate chart for {symbol}.")
+
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
