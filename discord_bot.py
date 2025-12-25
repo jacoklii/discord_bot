@@ -200,13 +200,13 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
         return []
 
 # --- FUNCTIONS: Visuals ---
-def create_candlestick_graph(symbol, days, interval, after_hours=False):
+def create_candlestick_graph(symbol, period, interval, after_hours=False):
     """ 
     Create a Candlestick Chart for a stock
     """
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f'{days}', interval=f'{interval}', prepost=True)
+        hist = ticker.history(period=f'{period}', interval=f'{interval}', prepost=True)
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs          
         hist = hist[hist.index.dayofweek < 5]
@@ -226,7 +226,7 @@ def create_candlestick_graph(symbol, days, interval, after_hours=False):
             hist, 
             type='candle',
             style='charles',
-            title=f"{symbol} - Last {days} Day{'s' if days != 1 else ''}",
+            title=f"{symbol} - Last {period}",
             ylabel='Price ($)',
             savefig=dict(fname=buf, dpi=100, bbox_inches='tight')
         )
@@ -240,14 +240,14 @@ def create_candlestick_graph(symbol, days, interval, after_hours=False):
         plt.close('all')
         return None
 
-def create_stock_graph(symbol, days, interval, after_hours=True):
+def create_stock_graph(symbol, period, interval, after_hours=False):
     """
     Create a Chart for stock report
     """
     try:
         ticker = yf.Ticker(symbol)
 
-        hist = ticker.history(period=f'{days}d', interval=f'{interval}m')
+        hist = ticker.history(period=period, interval=interval, prepost=True)
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
         hist = hist[hist.index.dayofweek < 5] # remove weekends
@@ -260,27 +260,40 @@ def create_stock_graph(symbol, days, interval, after_hours=True):
 
         if hist.empty:
             return None
+        
+        hist_reset = hist.reset_index()
 
         plt.figure(figsize=(10, 6))
         sns.set_style('whitegrid')
 
-        ax = sns.lineplot(data=hist, x=range(len(hist)), y='Close', linewidth=1.5)
+        sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
 
-        # custom Xticks
-        if days >= 7:
-            # daily for each day of the week
-            num_ticks = 5
-            tick_positions = [int(i * (len(hist) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-            tick_labels = [hist['Datetime'].iloc[i].strftime('%m/%d') for i in tick_positions]
+        total_days = (hist_reset['Datetime'].iloc[-1] - hist_reset['Datetime'].iloc[0]).days
+
+        # custom ticks
+        if total_days <= 1:
+            num_ticks = min(8, len(hist_reset))
+            date_format = '%H:%M'
+        if total_days <= 7:
+            num_ticks = min(7, len(hist_reset))
+            date_format = '%m/%d %H:%M'
+        if total_days <= 31:
+            num_ticks = min(10, len(hist_reset))
+            date_format = '%m/%d'
+        if total_days <= 365:
+            num_ticks = min(12, len(hist_reset))
+            date_format = '%b %d'
         else:
-            # hourly ticks from 9:30 to 4:00
-            num_ticks = 8
-            tick_positions = [int(i * (len(hist) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-            tick_labels = [hist['Datetime'].iloc[i].strftime('%H:%M') for i in tick_positions]
+            num_ticks = min(12, len(hist_reset))
+            date_format = '%b %Y'
+
+        tick_positions = [int(i * (len(hist_reset) / (num_ticks - 1))) for i in range(num_ticks)]
+        tick_labels = [hist_reset['Datetime'].iloc[i].strftime(date_format) for i in tick_positions]
 
         plt.xticks(tick_positions, tick_labels, fontsize=9)
+        plt.yticks(fontsize=9)
 
-        plt.title(f'{symbol} Stock Price - Last {days} Day{'s' if days != 1 else ''}', fontsize=17, fontweight='bold')
+        plt.title(f'{symbol} Stock Price - Last {period}', fontsize=17, fontweight='bold')
         plt.xlabel('Date', fontsize=11)
         plt.ylabel('Closing Price ($)', fontsize=11)
         plt.yticks(fontsize=9)
@@ -288,7 +301,6 @@ def create_stock_graph(symbol, days, interval, after_hours=True):
 
         # Buffer
         buf = io.BytesIO()
-
         plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
         plt.close('all')
@@ -392,17 +404,25 @@ async def watchlist(ctx):
 # --- Visuals for Stocks ---
 # Visuals: !chart 
 @bot.command()
-async def chart(ctx, symbol, days, interval):
+async def chart(ctx, symbol, period, interval):
     symbol = symbol.upper()
 
     await ctx.send(f"Generating chart for {symbol}...")
 
-    graph = create_candlestick_graph(symbol, days, interval, after_hours=True)
+    # Use candlestick chart only for short periods and intervals
+    candlestick_periods = ['1d', '5d', '1h', '4h', '1m', '2m', '5m', '15m', '30m', '60m', '90m']
+    candlestick_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
+
+    if period in candlestick_periods and interval in candlestick_intervals and period not in ['1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']:
+        graph = create_candlestick_graph(symbol, period, interval, after_hours=True)
+        chart_type = 'candlestick'
+    else:
+        graph = create_stock_graph(symbol, period, interval, after_hours=True)
+        chart_type = 'line'
 
     if graph:
-        file = discord.File(graph, filename=f'{symbol}_chart.png')
+        file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
         await ctx.send(file=file)
-
     else:
         await ctx.send(f"Could not generate chart for {symbol}.")
 
@@ -413,6 +433,8 @@ report_time = dt.time(hour=9, minute=30, tzinfo=pytz.timezone('US/Eastern'))
 @tasks.loop(time=report_time)
 async def market_open_report():
     """send stock notifications to the channel"""
+
+    await bot.wait_until_ready()
 
     # timezone
     eastern = pytz.timezone('US/Eastern')
@@ -469,11 +491,11 @@ async def market_open_report():
         for stock in stock_data:
             if abs(stock['percentage_change']) >= 1:
                 if is_weekend:
-                    graph = create_candlestick_graph(stock['symbol'], days='5d', interval='60m', after_hours=True)
+                    graph = create_candlestick_graph(stock['symbol'], period='5d', interval='60m', after_hours=True)
                 elif time_now.weekday() == 0: # Monday: last market open (Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], days='3d', interval='15m', after_hours=True)
+                    graph = create_candlestick_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
                 else: # last market open (Tuesday - Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], days='2d', interval='15m', after_hours=True)
+                    graph = create_candlestick_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
 
                 if graph:
                     files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
@@ -491,6 +513,8 @@ async def market_open_report():
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
 async def check_big_changes():
+
+    await bot.wait_until_ready()
 
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
     if time_now.weekday() >= 5:
@@ -535,6 +559,8 @@ async def check_big_changes():
 @tasks.loop(minutes=5)
 async def sp500_movers_alert():
 
+    await bot.wait_until_ready()
+
     time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
     if time_now.weekday() >= 5:
         return
@@ -574,18 +600,5 @@ async def sp500_movers_alert():
     else:
         print("S&P 500: Big price changes not found.")
 
-
-# wait until bot is ready
-@check_big_changes.before_loop
-async def before_check_big_prices():
-    await bot.wait_until_ready()
-
-@market_open_report.before_loop
-async def before_send_stock_prices():
-    await bot.wait_until_ready()
-
-sp500_movers_alert.before_loop
-async def before_send_sp500_alert():
-    await bot.wait_until_ready()
 
 bot.run(discord_token)
