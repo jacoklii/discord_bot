@@ -206,7 +206,7 @@ def create_candlestick_graph(symbol, period, interval, after_hours=False):
     """
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f'{period}', interval=f'{interval}', prepost=True)
+        hist = ticker.history(period=period, interval=interval, prepost=True)
 
         hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs          
         hist = hist[hist.index.dayofweek < 5]
@@ -253,10 +253,11 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
         hist = hist[hist.index.dayofweek < 5] # remove weekends
 
         # filter hours
-        if not after_hours:
-            hist = hist.between_time('9:30', '16:00')
-        else:
-            hist = hist.between_time('4:00', '20:00')
+        if 'm' in interval or 'h' in interval:
+            if not after_hours:
+                hist = hist.between_time('9:30', '16:00')
+            else:
+                hist = hist.between_time('4:00', '20:00')
 
         if hist.empty:
             return None
@@ -268,29 +269,29 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
 
         sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
 
-        total_days = (hist_reset['Datetime'].iloc[-1] - hist_reset['Datetime'].iloc[0]).days
+        total_days = (hist_reset['Date'].iloc[-1] - hist_reset['Date'].iloc[0]).days
 
         # custom ticks
         if total_days <= 1:
             num_ticks = min(8, len(hist_reset))
             date_format = '%H:%M'
-        if total_days <= 7:
+        elif total_days <= 7:
             num_ticks = min(7, len(hist_reset))
             date_format = '%m/%d %H:%M'
-        if total_days <= 31:
+        elif total_days <= 31:
             num_ticks = min(10, len(hist_reset))
             date_format = '%m/%d'
-        if total_days <= 365:
+        elif total_days <= 365:
             num_ticks = min(12, len(hist_reset))
             date_format = '%b %d'
         else:
             num_ticks = min(12, len(hist_reset))
             date_format = '%b %Y'
 
-        tick_positions = [int(i * (len(hist_reset) / (num_ticks - 1))) for i in range(num_ticks)]
-        tick_labels = [hist_reset['Datetime'].iloc[i].strftime(date_format) for i in tick_positions]
+        tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+        tick_labels = [hist_reset['Date'].iloc[i].strftime(date_format) for i in tick_positions]
 
-        plt.xticks(tick_positions, tick_labels, fontsize=9)
+        plt.xticks(tick_positions, tick_labels, fontsize=9, rotation=45)
         plt.yticks(fontsize=9)
 
         plt.title(f'{symbol} Stock Price - Last {period}', fontsize=17, fontweight='bold')
@@ -409,23 +410,26 @@ async def chart(ctx, symbol, period, interval):
 
     await ctx.send(f"Generating chart for {symbol}...")
 
-    # Use candlestick chart only for short periods and intervals
-    candlestick_periods = ['1d', '5d', '1h', '4h', '1m', '2m', '5m', '15m', '30m', '60m', '90m']
-    candlestick_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
+    try:
+        # Use candlestick chart only for short periods and intervals
+        candlestick_periods = ['60m', '90m','1h', '4h','1d','5d']
+        candlestick_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
 
-    if period in candlestick_periods and interval in candlestick_intervals and period not in ['1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']:
-        graph = create_candlestick_graph(symbol, period, interval, after_hours=True)
-        chart_type = 'candlestick'
-    else:
-        graph = create_stock_graph(symbol, period, interval, after_hours=True)
-        chart_type = 'line'
+        if period in candlestick_periods and interval in candlestick_intervals:
+            graph = create_candlestick_graph(symbol, period, interval, after_hours=True)
+            chart_type = 'candlestick'
+        else:
+            graph = create_stock_graph(symbol, period, interval, after_hours=True)
+            chart_type = 'line'
 
-    if graph:
-        file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
-        await ctx.send(file=file)
-    else:
-        await ctx.send(f"Could not generate chart for {symbol}.")
-
+        if graph:
+            file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
+            await ctx.send(file=file)
+        else:
+            await ctx.send(f"Could not generate chart for {symbol}.")
+    
+    except Exception as e:
+        await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
