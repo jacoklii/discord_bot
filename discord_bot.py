@@ -2,6 +2,7 @@
 import time
 import datetime as dt
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 # Data & API
 import requests
 import pandas as pd
@@ -320,11 +321,12 @@ def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_o
 
     try:
         ticker = yf.Ticker(symbol)
+        prepost = 'm' in interval or 'h' in interval
+        hist = ticker.history(period=period, interval=interval, prepost=prepost, auto_adjust=False)
 
-        hist = ticker.history(period=period, interval=interval, prepost=True)
-
-        hist = hist.tz_convert('US/Eastern')
-        hist = hist[hist.index.dayofweek < 5]
+        if prepost:
+            hist = hist.tz_convert('US/Eastern')
+            hist = hist[hist.index.dayofweek < 5]
 
         rolling_mean = hist['Close'].rolling(window=window).mean()
         rolling_std = hist['Close'].rolling(window=window).std()
@@ -347,9 +349,18 @@ def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_o
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Close', label=f'{symbol} Close Price', color='blue')
         
         # Bollinger Bands
-        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Middle_Band', label='Middle Band', color='orange')
-        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Upper_Band', label='Upper Band', color='red')
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Middle_Band', label='Middle Band (SMA)', color='orange')
+        sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Upper_Band', label='Upper Band', color='green')
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Lower_Band', label='Lower Band', color='red')
+
+
+        plt.fill_between(range(len(df_reset)), df_reset['Close'].values, df_reset['Upper_Band'].values, 
+        where=(df_reset['Close'].values <= df_reset['Upper_Band'].values), 
+        alpha=0.1, color='green', label='Overbought Zone')
+
+        plt.fill_between(range(len(df_reset)), df_reset['Close'].values, df_reset['Lower_Band'].values, 
+        where=(df_reset['Close'].values >= df_reset['Lower_Band'].values), 
+        alpha=0.1, color='red', label='Oversold Zone')
 
 
         total_days = (df_reset['Date'].iloc[-1] - df_reset['Date'].iloc[0]).days
@@ -372,7 +383,6 @@ def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_o
 
         tick_positions = [int(i * (len(df_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
         tick_labels = [df_reset['Date'].iloc[i].strftime(date_format) for i in tick_positions]
-
 
         plt.title(f'Bollinger Bands - {symbol} Stock Price - Last {period}', fontsize=17, fontweight='bold')
         plt.xlabel('Date', fontsize=11)
@@ -524,7 +534,8 @@ async def bollinger(ctx, symbol, period='1mo', interval='4h'):
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
-report_time = dt.time(hour=9, minute=30, tzinfo=pytz.timezone('US/Eastern'))
+timezone = ZoneInfo('America/New_York')
+report_time = dt.time(hour=9, minute=30, tzinfo=timezone)
 @tasks.loop(time=report_time)
 async def market_open_report():
     """send stock notifications to the channel"""
