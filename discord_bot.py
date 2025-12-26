@@ -345,15 +345,39 @@ def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_o
         plt.figure(figsize=(10, 6))
         sns.set_style('whitegrid')
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Close', label=f'{symbol} Close Price', color='blue')
-
+        
         # Bollinger Bands
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Middle_Band', label='Middle Band', color='orange')
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Upper_Band', label='Upper Band', color='red')
         sns.lineplot(data=df_reset, x=range(len(df_reset)), y='Lower_Band', label='Lower Band', color='red')
 
+
+        total_days = (df_reset['Date'].iloc[-1] - df_reset['Date'].iloc[0]).days
+        
+        if total_days <= 1:
+            num_ticks = min(8, len(df_reset))
+            date_format = '%H:%M'
+        elif total_days <= 7:
+            num_ticks = min(7, len(df_reset))
+            date_format = '%m/%d %H:%M'
+        elif total_days <= 31:
+            num_ticks = min(10, len(df_reset))
+            date_format = '%m/%d'
+        elif total_days <= 365:
+            num_ticks = min(12, len(df_reset))
+            date_format = '%b %d'
+        else:
+            num_ticks = min(12, len(df_reset))
+            date_format = '%b %Y'
+
+        tick_positions = [int(i * (len(df_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
+        tick_labels = [df_reset['Date'].iloc[i].strftime(date_format) for i in tick_positions]
+
+
         plt.title(f'Bollinger Bands - {symbol} Stock Price - Last {period}', fontsize=17, fontweight='bold')
         plt.xlabel('Date', fontsize=11)
         plt.ylabel('Price ($)', fontsize=11)
+        plt.xticks(ticks=tick_positions, labels=tick_labels, fontsize=9, rotation=45)
         plt.yticks(fontsize=9)
         plt.legend()
         plt.grid(True)
@@ -479,19 +503,23 @@ async def chart(ctx, symbol, period, interval):
         await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
 
 @bot.command()
-async def bollinger(ctx, symbol, period='1mo', interval='1d'):
+async def bollinger(ctx, symbol, period='1mo', interval='4h'):
     symbol = symbol.upper()
 
     await ctx.send(f"Generating Bollinger chart for {symbol}...")
+    
+    try:
+        graph = create_bollinger_bands(symbol, period, interval)
+        chart_type = 'bollinger_bands'
 
-    graph = create_bollinger_bands(symbol, period, interval)
-    chart_type = 'bollinger_bands'
+        if graph:
+            file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
+            await ctx.send(file=file)
+        else:
+            await ctx.send(f"Could not generate chart for {symbol}.")
 
-    if graph:
-        file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
-        await ctx.send(file=file)
-    else:
-        await ctx.send(f"Could not generate chart for {symbol}.")
+    except Exception as e:
+        await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
 
 
 # --- Task loops ---
