@@ -535,7 +535,7 @@ async def bollinger(ctx, symbol, period='1mo', interval='4h'):
 
 # --- Info for Stocks ---
 @bot.command()
-async def help(ctx):
+async def helpme(ctx):
     help_text = (
         "Available Commands:\n"
         "!current_price <symbol> - Get the current price of a stock.\n"
@@ -544,7 +544,7 @@ async def help(ctx):
         "!watchlist - View the current watchlist and prices.\n"
         "!chart <symbol> <period> <interval> - Generate a stock price chart.\n"
         "!bollinger <symbol> [period] [interval] - Generate a Bollinger Bands chart.\n"
-        "!help - Show this help message."
+        "!helpme - Show this help message."
     )
     await ctx.send(help_text)
 
@@ -556,7 +556,7 @@ async def periods(ctx):
         "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date."
     )
     await ctx.send(period_text)
-    
+
 @bot.command()
 async def intervals(ctx):
     interval_text = (
