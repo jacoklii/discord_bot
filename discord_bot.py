@@ -512,6 +512,7 @@ async def chart(ctx, symbol, period, interval):
     except Exception as e:
         await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
 
+# Visuals: !bollinger
 @bot.command()
 async def bollinger(ctx, symbol, period='1mo', interval='4h'):
     symbol = symbol.upper()
@@ -530,6 +531,40 @@ async def bollinger(ctx, symbol, period='1mo', interval='4h'):
 
     except Exception as e:
         await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
+
+
+# --- Info for Stocks ---
+@bot.command()
+async def help(ctx):
+    help_text = (
+        "Available Commands:\n"
+        "!current_price <symbol> - Get the current price of a stock.\n"
+        "!add <symbol> - Add a stock to the watchlist.\n"
+        "!remove <symbol> - Remove a stock from the watchlist.\n"
+        "!watchlist - View the current watchlist and prices.\n"
+        "!chart <symbol> <period> <interval> - Generate a stock price chart.\n"
+        "!bollinger <symbol> [period] [interval] - Generate a Bollinger Bands chart.\n"
+        "!help - Show this help message."
+    )
+    await ctx.send(help_text)
+
+@bot.command()
+async def periods(ctx):
+    period_text = (
+        'available Periods:\n',
+        '1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max\n'
+        "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date."
+    )
+    await ctx.send(period_text)
+    
+@bot.command()
+async def intervals(ctx):
+    interval_text = (
+        "Available Intervals:\n"
+        "1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 4h, 1d, 5d, 1wk, 1mo, 3mo\n"
+        "Note: 'm' indicates minutes, 'h' indicates hours, 'd' indicates days, 'wk' indicates weeks, and 'mo' indicates months."
+    )
+    await ctx.send(interval_text)
 
 
 # --- Task loops ---
