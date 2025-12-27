@@ -551,8 +551,8 @@ async def helpme(ctx):
 @bot.command()
 async def periods(ctx):
     period_text = (
-        'available Periods:\n',
-        '1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max\n'
+        "Available Periods:\n"
+        "1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max\n"
         "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date."
     )
     await ctx.send(period_text)
@@ -721,6 +721,7 @@ async def sp500_movers_alert():
         print("S&P 500 Big price movers found.")
 
         symbols = ', '.join(stock['symbol'] for stock in sp_movers[:5])
+
         embed = discord.Embed(
             title= f'S&P 500 ALERT: Big Price Movement for {symbols}{'...' if len(sp_movers) > 5 else ''}',
             color=discord.Color.red(),
