@@ -536,35 +536,47 @@ async def bollinger(ctx, symbol, period='1mo', interval='4h'):
 # --- Info for Stocks ---
 @bot.command()
 async def helpme(ctx):
-    help_text = (
-        "Available Commands:\n"
-        "!current_price <symbol> - Get the current price of a stock.\n"
-        "!add <symbol> - Add a stock to the watchlist.\n"
-        "!remove <symbol> - Remove a stock from the watchlist.\n"
-        "!watchlist - View the current watchlist and prices.\n"
-        "!chart <symbol> <period> <interval> - Generate a stock price chart.\n"
-        "!bollinger <symbol> [period] [interval] - Generate a Bollinger Bands chart.\n"
-        "!helpme - Show this help message."
+    embed = discord.Embed(
+        title='Stock Bot Commands',
+        color=discord.Color.blue(),
+        description=(
+            "Available Commands:\n"
+            " - !current_price <symbol> - Get the current price of a stock.\n"
+            " - !add <symbol> - Add a stock to the watchlist.\n"
+            " - !remove <symbol> - Remove a stock from the watchlist.\n"
+            " - !watchlist - View the current watchlist and prices.\n"
+            " - !chart <symbol> <period> <interval> - Generate a stock price chart.\n"
+            " - !bollinger <symbol> [period] [interval] - Generate a Bollinger Bands chart.\n"
+            " - !helpme - Shows this help message."
+        )
     )
-    await ctx.send(help_text)
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def periods(ctx):
-    period_text = (
-        "Available Periods:\n"
-        "1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max\n"
-        "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date."
+    embed = discord.Embed(
+        title='Stock Bot - Chart Periods',
+        color=discord.Color.blue(),
+        description=(
+            "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date.\n \n"
+            "Available Periods:\n"
+            "1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max\n"
+        )
     )
-    await ctx.send(period_text)
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def intervals(ctx):
-    interval_text = (
-        "Available Intervals:\n"
-        "1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 4h, 1d, 5d, 1wk, 1mo, 3mo\n"
-        "Note: 'm' indicates minutes, 'h' indicates hours, 'd' indicates days, 'wk' indicates weeks, and 'mo' indicates months."
+    embed = discord.Embed(
+        title='Stock Bot - Chart Intervals',
+        color=discord.Color.blue(),
+        description=(
+            "Note: 'm' indicates minutes, 'h' indicates hours, 'd' indicates days, 'wk' indicates weeks, and 'mo' indicates months.\n \n"
+            "Available Intervals:\n"
+            "1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 4h, 1d, 5d, 1wk, 1mo, 3mo\n"
+        )
     )
-    await ctx.send(interval_text)
+    await ctx.send(embed=embed)
 
 
 # --- Task loops ---
