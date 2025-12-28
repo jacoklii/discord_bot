@@ -45,6 +45,14 @@ sp500_last_checked_prices = {}
 
 # --- file management for stocks ---
 def load_stocks():
+    """
+    Load watchlist symbols from the persistent JSON file.
+
+    Returns:
+        list: List of stock symbol strings loaded from `watchlist.json`.
+              If the file does not exist, an empty list is returned and
+              an empty watchlist file is created.
+    """
     try:
         with open(STOCK_FILE, 'r') as f:
             data = json.load(f)
@@ -54,6 +62,12 @@ def load_stocks():
         return []
 
 def save_stocks(stocks):
+    """
+    Persist the provided list of stock symbols to the watchlist JSON file.
+
+    Args:
+        stocks (list): List of stock symbol strings to save to disk.
+    """
     with open(STOCK_FILE, 'w') as f:
         json.dump({'symbols': stocks}, f, indent=2)
 
@@ -62,6 +76,20 @@ STOCK_SYMBOLS = load_stocks()
 
 # --- FUNCTIONS: Prices ---
 def get_stock_prices(compare_to='previous_close'):
+    """
+    Retrieve current prices and percent changes for symbols in the watchlist.
+
+    Args:
+        compare_to (str): Reference price used to compute change. Supported
+            values: 'previous_close' (default) or 'week_start'.
+
+    Returns:
+        list[dict]: A list where each item contains keys:
+            - 'symbol': stock symbol (str)
+            - 'current_price': latest price (float)
+            - 'percentage_change': percent difference vs reference (float)
+            - 'change': absolute difference vs reference (float)
+    """
     # compare prices from last close to current price
     stock_data = [] # store stock price data
 
@@ -113,6 +141,16 @@ def get_stock_prices(compare_to='previous_close'):
     return stock_data
 
 def check_price_changes():
+    """
+    Compare current prices to the last saved checks and return symbols with
+    significant short-term moves.
+
+    The function uses the module-level `last_checked_prices` map to compute
+    percentage change vs the last observed price and updates that map.
+
+    Returns:
+        list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
+    """
     big_changes = []
     for symbol in STOCK_SYMBOLS:
         try:
@@ -147,7 +185,20 @@ def check_price_changes():
 
 sp500_cycle = None
 def get_sp500_movers(percent_threshold=1, batch_size=50):
+    """
+    Check a rotating batch of S&P 500 constituents and return symbols that
+    moved more than `percent_threshold` since the last check.
 
+    This function maintains an internal cycling iterator so that subsequent
+    calls examine different batches of S&P 500 symbols.
+
+    Args:
+        percent_threshold (float): Minimum absolute percent change to report.
+        batch_size (int): Number of symbols to check on this invocation.
+
+    Returns:
+        list[dict]: List of movers with keys 'symbol', 'current_price', 'last_price', 'percentage_change'.
+    """
     global sp500_cycle
 
     try:
@@ -202,8 +253,18 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
 
 # --- FUNCTIONS: Visuals ---
 def create_candlestick_graph(symbol, period, interval, after_hours=False):
-    """ 
-    Create a Candlestick Chart for a stock
+    """
+    Create a candlestick chart image for the given symbol and return a
+    BytesIO buffer containing the PNG image.
+
+    Args:
+        symbol (str): Stock ticker symbol.
+        period (str): Period string accepted by yfinance (e.g. '1mo', '5d').
+        interval (str): Interval string accepted by yfinance (e.g. '1m', '1d').
+        after_hours (bool): If True, include extended/pre/post market hours.
+
+    Returns:
+        io.BytesIO or None: In-memory PNG image buffer on success, or None on error.
     """
     try:
         ticker = yf.Ticker(symbol)
@@ -243,7 +304,16 @@ def create_candlestick_graph(symbol, period, interval, after_hours=False):
 
 def create_stock_graph(symbol, period, interval, after_hours=False):
     """
-    Create a Chart for stock report
+    Create a line chart of the stock's closing prices and return a PNG buffer.
+
+    Args:
+        symbol (str): Stock ticker symbol.
+        period (str): Time range to fetch (yfinance format, e.g. '1mo').
+        interval (str): Data interval (e.g. '1d', '4h').
+        after_hours (bool): Whether to include after-hours data.
+
+    Returns:
+        io.BytesIO or None: PNG image buffer if successful, otherwise None.
     """
     try:
         ticker = yf.Ticker(symbol)
@@ -316,7 +386,18 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
 
 def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_of_std=2):
     """
-    Calculate Bollinger Bands for a stock
+    Calculate Bollinger Bands for a symbol, render the bands and price as a
+    PNG image, and return an in-memory buffer.
+
+    Args:
+        symbol (str): Stock ticker symbol.
+        period (str): Period string for historical data (default '1mo').
+        interval (str): Interval for data points (default '1d').
+        window (int): Rolling window size for the moving average (default 20).
+        num_of_std (int): Number of standard deviations for the upper/lower bands.
+
+    Returns:
+        io.BytesIO or None: PNG image buffer containing the plotted Bollinger Bands, or None on error.
     """
 
     try:
@@ -410,6 +491,11 @@ def create_bollinger_bands(symbol, period='1mo', interval='1d', window=20, num_o
 # --- BOT EVENT ---
 @bot.event
 async def on_ready():
+    """
+    Discord event fired when the bot has connected and is ready.
+
+    Starts the periodic background tasks if they are not already running.
+    """
     print(f'We have logged in as {bot.user}')
     if not market_open_report.is_running():
         market_open_report.start()
@@ -420,9 +506,14 @@ async def on_ready():
 
 
 # --- COMMANDS ---
-# Command: !current_price
 @bot.command()
 async def current_price(ctx):
+    """
+    Command: !current_price <symbol1> [symbol2 ...]
+
+    Sends the current price for each provided stock symbol back to the channel.
+    If no symbol is provided, prompts the user for input.
+    """
     input_text = ctx.message.content.split()
     if len(input_text) < 2:
         await ctx.send('Please provide a stock symbol')
@@ -434,9 +525,13 @@ async def current_price(ctx):
         await ctx.send(f'The current price of {stock_symbol} is ${todays_price:.2f}')
 
 # --- Manage Stocks Commands ---
-# manage stocks: !add
 @bot.command()
 async def add(ctx,symbol):
+    """
+    Command: !add <symbol>
+
+    Adds the given stock symbol to the persistent watchlist.
+    """
     symbol = symbol.upper()
 
     if symbol not in STOCK_SYMBOLS:
@@ -446,9 +541,13 @@ async def add(ctx,symbol):
     else:
         await ctx.send(f'{symbol} already in watchlist.')
 
-# manage stocks: !remove
 @bot.command()
 async def remove(ctx, stock):
+    """
+    Command: !remove <symbol>
+
+    Removes the given stock symbol from the persistent watchlist.
+    """
     symbol = stock.upper()
 
     if symbol in STOCK_SYMBOLS:
@@ -458,9 +557,14 @@ async def remove(ctx, stock):
     else:
         await ctx.send(f'{symbol} is not found in watchlist.')
 
-# manage stocks: !Watchlist
 @bot.command()
 async def watchlist(ctx):
+    """
+    Command: !watchlist
+
+    Sends an embed containing the current prices of all symbols in the watchlist.
+    If the watchlist is empty, prompts the user to add symbols.
+    """
     if not STOCK_SYMBOLS:
         await ctx.send(f'Watchlist is empty. Please use !add <symbol> to add stocks.')
         return
@@ -484,10 +588,15 @@ async def watchlist(ctx):
         await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}.\n Could not get stock prices/data.")
 
 # --- Visuals for Stocks ---
-# Visuals: !chart 
 @bot.command()
 async def chart(ctx, symbol, period, interval):
     symbol = symbol.upper()
+    """
+    Command: !chart <symbol> <period> <interval>
+
+    Generates an appropriate chart (candlestick or line) for the requested
+    symbol/period/interval and sends it back to the channel as an image file.
+    """
 
     await ctx.send(f"Generating chart for {symbol}...")
 
@@ -512,10 +621,15 @@ async def chart(ctx, symbol, period, interval):
     except Exception as e:
         await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
 
-# Visuals: !bollinger
 @bot.command()
 async def bollinger(ctx, symbol, period='1mo', interval='4h'):
     symbol = symbol.upper()
+    """
+    Command: !bollinger <symbol> [period] [interval]
+
+    Generates a Bollinger Bands chart for the requested symbol and sends it
+    back to the channel as an image file.
+    """
 
     await ctx.send(f"Generating Bollinger chart for {symbol}...")
     
@@ -536,6 +650,11 @@ async def bollinger(ctx, symbol, period='1mo', interval='4h'):
 # --- Info for Stocks ---
 @bot.command()
 async def helpme(ctx):
+    """
+    Command: !helpme
+
+    Sends an embed that lists the bot's available commands and usage.
+    """
     embed = discord.Embed(
         title='Stock Bot Commands',
         color=discord.Color.blue(),
@@ -554,6 +673,11 @@ async def helpme(ctx):
 
 @bot.command()
 async def periods(ctx):
+    """
+    Command: !periods
+
+    Sends an embed listing valid chart period strings the bot supports.
+    """
     embed = discord.Embed(
         title='Stock Bot - Chart Periods',
         color=discord.Color.blue(),
@@ -567,6 +691,11 @@ async def periods(ctx):
 
 @bot.command()
 async def intervals(ctx):
+    """
+    Command: !intervals
+
+    Sends an embed listing valid chart interval strings the bot supports.
+    """
     embed = discord.Embed(
         title='Stock Bot - Chart Intervals',
         color=discord.Color.blue(),
@@ -585,7 +714,11 @@ timezone = ZoneInfo('America/New_York')
 report_time = dt.time(hour=9, minute=30, tzinfo=timezone)
 @tasks.loop(time=report_time)
 async def market_open_report():
-    """send stock notifications to the channel"""
+    """ 
+    Periodic task that runs at market open (9:30am EST) on weekdays to send
+    a summary report of the stock prices in watchlist and runs a weekend 
+    summary of the previous week's performance on Saturdays to the channel. 
+    """
 
     await bot.wait_until_ready()
 
@@ -666,6 +799,10 @@ async def market_open_report():
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
 async def check_big_changes():
+    """
+    Periodic task that runs every five minutes during market hours to check
+    the watchlist for large price movements and post alerts to the channel.
+    """
 
     await bot.wait_until_ready()
 
@@ -711,6 +848,10 @@ async def check_big_changes():
 # Send S&P 500 Movers Alerts
 @tasks.loop(minutes=5)
 async def sp500_movers_alert():
+    """
+    Periodic task that checks a rotating subset of S&P 500 constituents for
+    large moves and posts alerts to the configured channel during market hours.
+    """
 
     await bot.wait_until_ready()
 
