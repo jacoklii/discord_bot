@@ -111,32 +111,33 @@ def get_stock_prices(compare_to='previous_close'):
 
             # get reference price on monday for week start comparison
             if compare_to == 'week_start':
-                hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False)
+                hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False, auto_adjust=False)
                 hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
 
                 if not hist_5m.empty:
-                    reference_price = hist_5m['Close'].iloc[0]
+                    reference_price = float(hist_5m['Close'].iloc[0])
                 # quick fallback if market was closed on monday
                 else:
-                    reference_price = hist['Close'].iloc[-2]
+                    reference_price = float(hist['Close'].iloc[-2])
 
             # default to get yesterdays price
             else:
-                reference_price = hist['Close'].iloc[-2]
+                reference_price = float(hist['Close'].iloc[-2])
 
-            change = current_price - reference_price
-            percentage_change = ((current_price - reference_price) / reference_price) * 100
+            change = float(current_price - reference_price)
+            percentage_change = float((current_price - reference_price) / reference_price) * 100
 
             # add data captured to the stock data list
             stock_data.append({
                 'symbol': symbol,
-                'current_price': current_price,
+                'current_price': float(current_price),
                 'percentage_change': percentage_change,
                 'change': change
             })
         
         except Exception as e:
             print(f'Error getting data for {symbol}: {e}')
+            continue
 
     return stock_data
 
