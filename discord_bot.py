@@ -1,5 +1,5 @@
 # Time 
-import time
+
 import datetime as dt
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -73,9 +73,55 @@ def save_stocks(stocks):
 
 STOCK_SYMBOLS = load_stocks()
 
-
 # --- FUNCTIONS: Prices ---
-def get_stock_prices(compare_to='previous_close'):
+def get_prices_fast():
+    """
+    Get fast, real-time price fetch for commands to retrieve current prices 
+    and percent changes for symbols in the watchlist.
+
+    Returns:
+        list[dict]: A list where each item contains keys:
+            - 'symbol': stock symbol (str)
+            - 'current_price': latest price (float)
+            - 'percentage_change': percent difference vs reference (float)
+            - 'change': absolute difference vs reference (float)
+    """
+
+    stock_data = [] # store stock price data
+    
+    if not STOCK_SYMBOLS:
+        return stock_data
+
+    # compare prices from last close to current price
+
+    tickers = yf.Tickers(' '.join(STOCK_SYMBOLS))
+
+    for symbol in STOCK_SYMBOLS:
+        try:
+            ticker = tickers.tickers[symbol]
+
+            current_price = float(ticker.fast_info.last_price)
+            prev_close = float(ticker.fast_info.previous_close)
+
+            change = float(current_price - prev_close)
+            percentage_change = float((current_price - prev_close) / prev_close) * 100
+
+            # add data captured to the stock data list
+            stock_data.append({
+                'symbol': symbol,
+                'current_price': current_price,
+                'percentage_change': percentage_change,
+                'change': change
+            })
+        
+        except Exception as e:
+            print(f'Error getting data for {symbol}: {e}')
+            continue
+
+    return stock_data
+
+#TODO: Make a function only for taskloops and reports for batching prices info
+def get_prices_batch(compare_to='previous_close'):
     """
     Retrieve current prices and percent changes for symbols in the watchlist.
 
@@ -90,6 +136,9 @@ def get_stock_prices(compare_to='previous_close'):
             - 'percentage_change': percent difference vs reference (float)
             - 'change': absolute difference vs reference (float)
     """
+
+
+
     # compare prices from last close to current price
     stock_data = [] # store stock price data
 
@@ -140,6 +189,7 @@ def get_stock_prices(compare_to='previous_close'):
             continue
 
     return stock_data
+
 
 def check_price_changes():
     """
@@ -508,22 +558,39 @@ async def on_ready():
 
 # --- COMMANDS ---
 @bot.command()
-async def current_price(ctx):
+async def price(ctx, *symbols):
     """
-    Command: !current_price <symbol1> [symbol2 ...]
+    Command: !price <symbol1> (<symbol2> <symbol3> ...)
 
     Sends the current price for each provided stock symbol back to the channel.
     If no symbol is provided, prompts the user for input.
     """
-    input_text = ctx.message.content.split()
-    if len(input_text) < 2:
-        await ctx.send('Please provide a stock symbol')
+    try:
+        symbols_upper = [s.upper() for s in symbols]
+        tickers = yf.Tickers(' '.join(symbols_upper))
 
-    # checks if stock symbol was asked
-    for stock_symbol in input_text[1:]:
-        ticker = yf.Ticker(str(stock_symbol)) # grab ticker
-        todays_price = ticker.fast_info.last_price
-        await ctx.send(f'The current price of {stock_symbol} is ${todays_price:.2f}')
+        embed = discord.Embed(
+            title='Stock Prices',
+            color=discord.Color.blue
+        )
+
+        # checks if stock symbol was asked
+        for symbol in symbols_upper:
+            current_price = tickers.tickers[symbol].fast_info.last_price
+
+            embed.add_field(
+                name=symbol,
+                value=f'${current_price:.2f}',
+                inline=True
+            )
+        
+        await ctx.send(embed=embed)
+
+        # await ctx.send(f'The current price of {symbol.upper()}: ${current_price:.2f}')
+
+    except Exception as e:
+        await ctx.send(f'Could not get the price of {symbols_upper}.')
+        print(f'Error getting stock price:\n{e}')
 
 # --- Manage Stocks Commands ---
 @bot.command()
@@ -570,7 +637,7 @@ async def watchlist(ctx):
         await ctx.send(f'Watchlist is empty. Please use !add <symbol> to add stocks.')
         return
 
-    stock_data = get_stock_prices()
+    stock_data = get_prices_fast()
 
     if stock_data:
         embed = discord.Embed(
@@ -742,7 +809,7 @@ async def market_open_report():
         return
 
     is_weekend = time_now.weekday() >= 5
-    stock_data = get_stock_prices(compare_to='week_start' if is_weekend else 'previous_close')
+    stock_data = get_prices_batch(compare_to='week_start' if is_weekend else 'previous_close')
 
     if stock_data:
         # message format: embed
