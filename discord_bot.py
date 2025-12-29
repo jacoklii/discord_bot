@@ -1,5 +1,4 @@
 # Time 
-
 import datetime as dt
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -565,15 +564,18 @@ async def price(ctx, *symbols):
     Sends the current price for each provided stock symbol back to the channel.
     If no symbol is provided, prompts the user for input.
     """
+    if not symbols:
+        await ctx.send('Please provide atleast one stock symbol.')
+
+    symbols_upper = [s.upper() for s in symbols]
+    tickers = yf.Tickers(' '.join(symbols_upper))
+
+    embed = discord.Embed(
+        title='Stock Prices',
+        color=discord.Color.blue()
+    )
+    
     try:
-        symbols_upper = [s.upper() for s in symbols]
-        tickers = yf.Tickers(' '.join(symbols_upper))
-
-        embed = discord.Embed(
-            title='Stock Prices',
-            color=discord.Color.blue
-        )
-
         # checks if stock symbol was asked
         for symbol in symbols_upper:
             current_price = tickers.tickers[symbol].fast_info.last_price
@@ -583,14 +585,13 @@ async def price(ctx, *symbols):
                 value=f'${current_price:.2f}',
                 inline=True
             )
-        
-        await ctx.send(embed=embed)
-
-        # await ctx.send(f'The current price of {symbol.upper()}: ${current_price:.2f}')
 
     except Exception as e:
-        await ctx.send(f'Could not get the price of {symbols_upper}.')
+        await ctx.send(f'Could not get the price of {symbol}.')
         print(f'Error getting stock price:\n{e}')
+    
+    await ctx.send(embed=embed)
+
 
 # --- Manage Stocks Commands ---
 @bot.command()
@@ -642,7 +643,7 @@ async def watchlist(ctx):
     if stock_data:
         embed = discord.Embed(
             title='Watchlist Prices',
-            color=discord.Color.blue(),
+            color=discord.Color.blue()
             )
  
         for stock in stock_data:
