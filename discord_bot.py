@@ -16,12 +16,18 @@ import os
 import json
 import itertools # for S&P 500
 from dotenv import load_dotenv
+import logging
 # Visuals
 import mplfinance as mpf
 import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# --- Logging ---
+logging.getLogger('discord').setLevel(logging.WARNING)
+logging.getLogger('discord.http').setLevel(logging.WARNING)
+logging.getLogger('discord.gateway').setLevel(logging.WARNING)
 
 
 # --- .env & Tokens ---
@@ -574,7 +580,7 @@ async def price(ctx, *symbols):
         title='Stock Prices',
         color=discord.Color.blue()
     )
-    
+
     try:
         # checks if stock symbol was asked
         for symbol in symbols_upper:
