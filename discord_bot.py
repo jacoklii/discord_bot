@@ -1,4 +1,5 @@
 # Time 
+import time
 import datetime as dt
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -350,12 +351,12 @@ def create_candlestick_graph(symbol, period, interval, after_hours=False):
         )
 
         buf.seek(0)
-        plt.close('all')
+        plt.close()
         return buf
 
     except Exception as e:
-        print(f'Error creating graph for {symbol}: {e}')
-        plt.close('all')
+        logging.error(f'Error creating graph for {symbol}: {e}')
+        plt.close()
         return None
 
 def create_stock_graph(symbol, period, interval, after_hours=False):
@@ -376,7 +377,10 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
 
         hist = ticker.history(period=period, interval=interval, prepost=True)
 
-        hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
+        if hist.index.tz is None:
+            hist = hist.tz_localize('UTC').tz_convert('US/Eastern') # ensure tz-aware before converting
+        else:
+            hist = hist.tz_convert('US/Eastern') # convert time to eastern time for graphs
         hist = hist[hist.index.dayofweek < 5] # remove weekends
 
         # filter hours
@@ -665,19 +669,19 @@ async def watchlist(ctx):
 # --- Visuals for Stocks ---
 @bot.command()
 async def chart(ctx, symbol, period, interval):
-    symbol = symbol.upper()
     """
     Command: !chart <symbol> <period> <interval>
 
     Generates an appropriate chart (candlestick or line) for the requested
     symbol/period/interval and sends it back to the channel as an image file.
     """
+    symbol = symbol.upper()
 
     await ctx.send(f"Generating chart for {symbol}...")
 
     try:
         # Use candlestick chart only for short periods and intervals
-        candlestick_periods = ['60m', '90m','1h', '4h','1d','5d']
+        candlestick_periods = ['60m', '90m','1h', '4h','1d']
         candlestick_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
 
         if period in candlestick_periods and interval in candlestick_intervals:
@@ -694,7 +698,8 @@ async def chart(ctx, symbol, period, interval):
             await ctx.send(f"Could not generate chart for {symbol}.")
     
     except Exception as e:
-        await ctx.send(f'Error generating chart for {symbol}: {str(e)}')
+        logging.error(f'Error generating chart for {symbol}: {str(e)}')
+        await ctx.send(f'An error occurred while generating the chart for {symbol}. Please try again later.')
 
 @bot.command()
 async def bollinger(ctx, symbol, period='1mo', interval='4h'):
@@ -852,11 +857,11 @@ async def market_open_report():
         for stock in stock_data:
             if abs(stock['percentage_change']) >= 1:
                 if is_weekend:
-                    graph = create_candlestick_graph(stock['symbol'], period='5d', interval='60m', after_hours=True)
+                    graph = create_bollinger_bands(stock['symbol'], period='5d', interval='60m', after_hours=True)
                 elif time_now.weekday() == 0: # Monday: last market open (Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
+                    graph = create_stock_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
                 else: # last market open (Tuesday - Friday) for reference
-                    graph = create_candlestick_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
+                    graph = create_stock_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
 
                 if graph:
                     files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
