@@ -1,4 +1,4 @@
-# Time 
+# Time Date
 import time
 import datetime as dt
 from datetime import datetime, timedelta
@@ -316,8 +316,8 @@ def create_candlestick_graph(symbol, period, interval, after_hours=False):
 
     Args:
         symbol (str): Stock ticker symbol.
-        period (str): Period string accepted by yfinance (e.g. '1mo', '5d').
-        interval (str): Interval string accepted by yfinance (e.g. '1m', '1d').
+        period (str): Period string accepted by yfinance (e.g. '4h', '5d').
+        interval (str): Interval string accepted by yfinance (e.g. '1m', '1h').
         after_hours (bool): If True, include extended/pre/post market hours.
 
     Returns:
@@ -395,12 +395,14 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
         
         hist_reset = hist.reset_index()
 
+        date_col = 'Date' if 'Date' in hist_reset.columns else 'Datetime'
+
         plt.figure(figsize=(10, 6))
         sns.set_style('whitegrid')
 
         sns.lineplot(data=hist_reset, x=range(len(hist_reset)), y='Close', linewidth=1.5)
 
-        total_days = (hist_reset['Date'].iloc[-1] - hist_reset['Date'].iloc[0]).days
+        total_days = (hist_reset[date_col].iloc[-1] - hist_reset[date_col].iloc[0]).days
 
         # custom ticks
         if total_days <= 1:
@@ -420,7 +422,7 @@ def create_stock_graph(symbol, period, interval, after_hours=False):
             date_format = '%b %Y'
 
         tick_positions = [int(i * (len(hist_reset) - 1) / (num_ticks - 1)) for i in range(num_ticks)]
-        tick_labels = [hist_reset['Date'].iloc[i].strftime(date_format) for i in tick_positions]
+        tick_labels = [hist_reset[date_col].iloc[i].strftime(date_format) for i in tick_positions]
 
         plt.xticks(tick_positions, tick_labels, fontsize=9, rotation=45)
         plt.yticks(fontsize=9)
@@ -668,7 +670,7 @@ async def watchlist(ctx):
 
 # --- Visuals for Stocks ---
 @bot.command()
-async def chart(ctx, symbol, period, interval):
+async def chart(ctx, symbol: str, period: str = '5d', interval: str = '30m'):
     """
     Command: !chart <symbol> <period> <interval>
 
@@ -681,7 +683,7 @@ async def chart(ctx, symbol, period, interval):
 
     try:
         # Use candlestick chart only for short periods and intervals
-        candlestick_periods = ['60m', '90m','1h', '4h','1d']
+        candlestick_periods = ['60m','90m','4h','1d','2d','3d']
         candlestick_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
 
         if period in candlestick_periods and interval in candlestick_intervals:
@@ -695,11 +697,11 @@ async def chart(ctx, symbol, period, interval):
             file = discord.File(graph, filename=f'{symbol}_{chart_type}_chart.png')
             await ctx.send(file=file)
         else:
-            await ctx.send(f"Could not generate chart for {symbol}.")
+            await ctx.send(f"Could not generate chart for {symbol}. Check if constraints are valid.")
     
     except Exception as e:
         logging.error(f'Error generating chart for {symbol}: {str(e)}')
-        await ctx.send(f'An error occurred while generating the chart for {symbol}. Please try again later.')
+        await ctx.send(f'An error occurred while generating the chart for {symbol}: {str(e)} Please try again later.')
 
 @bot.command()
 async def bollinger(ctx, symbol, period='1mo', interval='4h'):
