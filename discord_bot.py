@@ -607,7 +607,7 @@ async def price(ctx, *symbols):
 
 # --- Manage Stocks Commands ---
 @bot.command()
-async def add(ctx,symbol):
+async def add(ctx, symbol):
     """
     Command: !add <symbol>
 
@@ -704,7 +704,7 @@ async def chart(ctx, symbol: str, period: str = '5d', interval: str = '30m'):
         await ctx.send(f'An error occurred while generating the chart for {symbol}: {str(e)} Please try again later.')
 
 @bot.command()
-async def bollinger(ctx, symbol, period='1mo', interval='4h'):
+async def bollinger(ctx, symbol: str, period: str = '1mo', interval: str = '4h'):
     symbol = symbol.upper()
     """
     Command: !bollinger <symbol> [period] [interval]
