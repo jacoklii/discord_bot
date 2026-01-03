@@ -764,9 +764,17 @@ async def periods(ctx):
         title='Stock Bot - Chart Periods',
         color=discord.Color.blue(),
         description=(
-            "Note: 'd' indicates days, 'mo' indicates months, 'y' indicates years, and 'ytd' indicates year-to-date.\n \n"
-            "Available Periods:\n"
-            "1d, 5d, 1mo, 3mo, 6mo, ytd, 1y, 2y, 5y, 10y, max"
+            """
+            Note: The user is allowed to use any number for numeric periods.
+
+            **Available Periods:**
+            **Days**\n1d, 2d, 3d, 4d, ...
+            **Weeks**\n1wk, 2wk, 3wk, 4wk, ...
+            **Months**\n1mo, 2mo, 3mo, 4mo, ...
+            **Year-to-date**\nytd
+            **Years**\n1y, 2y, 3y, 4y, ...
+            **Max history**\nmax
+            """
         )
     )
     await ctx.send(embed=embed)
@@ -782,9 +790,17 @@ async def intervals(ctx):
         title='Stock Bot - Chart Intervals',
         color=discord.Color.blue(),
         description=(
-            "Note: 'm' indicates minutes, 'h' indicates hours, 'd' indicates days, 'wk' indicates weeks, and 'mo' indicates months.\n \n"
-            "Available Intervals:\n"
-            "1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 4h, 1d, 5d, 1wk, 1mo, 3mo"
+            """
+            Note: 'm' indicates minutes, 'h' indicates hours, 'd' indicates days,
+            'wk' indicates weeks, and 'mo' indicates months.
+
+            **Available Intervals:**
+            **Minutes**\n1m, 2m, 5m, 15m, 30m, 60m, 90m
+            **Hours**\n1h, 4h
+            **Days**\n1d, 5d
+            **Weeks**\n1wk
+            **Months**\n1mo, 3mo
+            """
         )
     )
     await ctx.send(embed=embed)
