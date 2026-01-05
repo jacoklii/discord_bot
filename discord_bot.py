@@ -77,6 +77,10 @@ def save_stocks(stocks):
     with open(STOCK_FILE, 'w') as f:
         json.dump({'symbols': stocks}, f, indent=2)
 
+def clean_symbol(symbol):
+    """Convert symbol format for yfinance from dots to hyphens"""
+    return symbol.replace('.','-')
+
 STOCK_SYMBOLS = load_stocks()
 
 # --- FUNCTIONS: Prices ---
@@ -278,7 +282,8 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
         for symbol in batch:
             if symbol not in STOCK_SYMBOLS: #checks if s&p 500 symbol isn't already in watchlist
                 try:
-                    ticker = yf.Ticker(symbol)
+                    yf_symbol = clean_symbol(symbol)
+                    ticker = yf.Ticker(yf_symbol)
                     current_price = ticker.fast_info.last_price
 
                     if symbol in sp500_last_checked_prices:
