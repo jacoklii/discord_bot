@@ -246,6 +246,9 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
     Check a rotating batch of S&P 500 constituents and return symbols that
     moved more than `percent_threshold` since the last check.
 
+    Note: The S&P 500 symbol list is fetched from a remote CSV on every call,
+    which may have rate-limit or performance implications.
+
     This function maintains an internal cycling iterator so that subsequent
     calls examine different batches of S&P 500 symbols.
 
@@ -265,7 +268,6 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
         response.raise_for_status()
 
         lines = response.text.strip().split('\n')
-        # headers = lines[0].split(',')
         sp500_symbols = [line.split(',')[0] for line in lines[1:]]
 
         if sp500_cycle is None:
@@ -277,6 +279,7 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
             if symbol not in STOCK_SYMBOLS: #checks if s&p 500 symbol isn't already in watchlist
                 try:
                     ticker = yf.Ticker(symbol)
+                    current_price = ticker.fast_info.last_price
 
                     if symbol in sp500_last_checked_prices:
                         last_price = sp500_last_checked_prices[symbol] # gets the last checked price and compares percentage to it
@@ -284,8 +287,6 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
 
                         # checks the pecent change if the absolute value is greater than threshold
                         if abs(percentage_change) >= percent_threshold:
-                            current_price = ticker.fast_info.last_price
-
                             big_movers.append({
                                 'symbol': symbol,
                                 'current_price': current_price,
@@ -295,12 +296,10 @@ def get_sp500_movers(percent_threshold=1, batch_size=50):
 
                     # updates last checked price for next comparison
                     sp500_last_checked_prices[symbol] = current_price
-
-                except:
+                except Exception:
                     continue
             else:
                 continue
-
         # pass big movers
         return big_movers
 
