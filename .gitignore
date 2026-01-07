@@ -3,3 +3,5 @@ bot-env
 .env
 
 watchlist.json
+
+__pycache__

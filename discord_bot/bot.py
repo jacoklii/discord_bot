@@ -11,6 +11,8 @@ import discord
 from discord.ext import commands, tasks
 # Utilities
 import pytz
+import asyncio
+from functools import partial
 import logging
 # Scripts
 from config import CHANNEL_ID, discord_token
@@ -445,7 +447,9 @@ async def sp500_movers_alert():
         print(f'Channel {CHANNEL_ID} not found')
         return
     
-    sp_movers = get_sp500_movers(percent_threshold=1, batch_size=50)
+    # Run the blocking stock data operation in a separate thread to prevent blocking the event loop
+    loop = asyncio.get_event_loop()
+    sp_movers = await loop.run_in_executor(None, partial(get_sp500_movers, percent_threshold=1, batch_size=50))
 
     if sp_movers:
         print("S&P 500 Big price movers found.")
