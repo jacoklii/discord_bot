@@ -299,8 +299,6 @@ async def market_open_report():
     summary of the previous week's performance on Saturdays to the channel. 
     """
 
-    await bot.wait_until_ready()
-
     # timezone
     eastern = pytz.timezone('US/Eastern')
     time_now = dt.datetime.now(eastern)
@@ -425,7 +423,7 @@ async def check_big_changes():
         print("WATCHLIST: Big price changes not found.")
 
 # Send S&P 500 Movers Alerts
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=15)
 async def sp500_movers_alert():
     """
     Periodic task that checks a rotating subset of S&P 500 constituents for
@@ -449,7 +447,7 @@ async def sp500_movers_alert():
     
     # Run the blocking stock data operation in a separate thread to prevent blocking the event loop
     loop = asyncio.get_event_loop()
-    sp_movers = await loop.run_in_executor(None, partial(get_sp500_movers, percent_threshold=1, batch_size=50))
+    sp_movers = await loop.run_in_executor(None, partial(get_sp500_movers, percent_threshold=3, batch_size=50))
 
     if sp_movers:
         print("S&P 500 Big price movers found.")

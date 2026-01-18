@@ -170,7 +170,7 @@ def check_price_changes():
     return big_changes
 
 sp500_cycle = None
-def get_sp500_movers(percent_threshold=2, batch_size=50):
+def get_sp500_movers(percent_threshold=2, batch_size=25):
     """
     Check a rotating batch of S&P 500 constituents and return symbols that
     moved more than `percent_threshold` since the last check.
