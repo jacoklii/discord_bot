@@ -1,8 +1,7 @@
 # Time Date
 import time
 import datetime as dt
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime
 # Data & API
 import pandas as pd
 import yfinance as yf
@@ -15,10 +14,10 @@ import asyncio
 from functools import partial
 import logging
 # Scripts
-from config import CHANNEL_ID, discord_token
-from storage import load_stocks, save_stocks
-from stock_data import get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
-from charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
+from src.config.config import CHANNEL_ID, TIMEZONE, TIME_NOW, discord_token
+from src.config.storage import STOCK_SYMBOLS, save_stocks
+from src.utils.stock_data import get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
+from src.utils.charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
 
 # --- Logging ---
 logging.getLogger('discord').setLevel(logging.WARNING)
@@ -30,7 +29,6 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-STOCK_SYMBOLS = load_stocks()
 
 # --- BOT EVENT ---
 @bot.event
@@ -47,6 +45,7 @@ async def on_ready():
         check_big_changes.start()
     if not sp500_movers_alert.is_running():
         sp500_movers_alert.start()
+
 
 # --- COMMANDS ---
 @bot.command()
@@ -84,7 +83,6 @@ async def price(ctx, *symbols):
         print(f'Error getting stock price:\n{e}')
     
     await ctx.send(embed=embed)
-
 
 # --- Manage Stocks Commands ---
 @bot.command()
@@ -149,7 +147,7 @@ async def watchlist(ctx):
     else:
         await ctx.send(f"Watching:\n {', '.join(sorted(STOCK_SYMBOLS))}.\n Could not get stock prices/data.")
 
-# --- Visuals for Stocks ---
+# --- Visual Commands for Stocks ---
 @bot.command()
 async def chart(ctx, symbol: str, period: str = '5d', interval: str = '30m'):
     """
@@ -289,8 +287,7 @@ async def intervals(ctx):
 
 # --- Task loops ---
 # Send notification of stock prices and percent change
-timezone = ZoneInfo('America/New_York')
-report_time = dt.time(hour=9, minute=30, tzinfo=timezone)
+report_time = dt.time(hour=9, minute=30, tzinfo=TIMEZONE)
 @tasks.loop(time=report_time)
 async def market_open_report():
     """ 
@@ -299,11 +296,7 @@ async def market_open_report():
     summary of the previous week's performance on Saturdays to the channel. 
     """
 
-    # timezone
-    eastern = pytz.timezone('US/Eastern')
-    time_now = dt.datetime.now(eastern)
-
-    print(f"[{datetime.now()}] Sending market open report...")
+    print(f"[{TIME_NOW}] Sending market open report...")
 
     channel = bot.get_channel(CHANNEL_ID)
 
@@ -317,7 +310,7 @@ async def market_open_report():
         await channel.send('No stocks in watchlist.')
         return
 
-    is_weekend = time_now.weekday() >= 5
+    is_weekend = TIME_NOW.weekday() >= 5
     stock_data = get_prices_batch(compare_to='week_start' if is_weekend else 'previous_close')
 
     if stock_data:
@@ -355,7 +348,7 @@ async def market_open_report():
             if abs(stock['percentage_change']) >= 1:
                 if is_weekend:
                     graph = create_bollinger_bands(stock['symbol'], period='5d', interval='60m', after_hours=True)
-                elif time_now.weekday() == 0: # Monday: last market open (Friday) for reference
+                elif TIME_NOW.weekday() == 0: # Monday: last market open (Friday) for reference
                     graph = create_stock_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
                 else: # last market open (Tuesday - Friday) for reference
                     graph = create_stock_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
@@ -383,10 +376,9 @@ async def check_big_changes():
 
     await bot.wait_until_ready()
 
-    time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
-    if time_now.weekday() >= 5:
+    if TIME_NOW.weekday() >= 5:
         return
-    if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour > 16:
+    if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30) or TIME_NOW.hour > 16:
         return
 
     print(f"[{datetime.now()}] WATCHLIST: Checking for big changes...")
@@ -432,13 +424,12 @@ async def sp500_movers_alert():
 
     await bot.wait_until_ready()
 
-    time_now = dt.datetime.now(pytz.timezone('US/Eastern'))
-    if time_now.weekday() >= 5:
+    if TIME_NOW.weekday() >= 5:
         return
-    if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour >= 16:
+    if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30) or TIME_NOW.hour >= 16:
         return
 
-    print(f"[{datetime.now()}] S&P 500: Checking for big changes...")
+    print(f"[{TIME_NOW}] S&P 500: Checking for big changes...")
 
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:

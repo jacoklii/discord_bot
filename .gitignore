@@ -2,6 +2,13 @@
 bot-env
 .env
 
+# Database files
+*.db
+*.sqlite
+
+# Watchlist files
 watchlist.json
 
+# Miscellaneous
 __pycache__
+__init__.py

@@ -3,8 +3,8 @@ import pandas as pd
 import yfinance as yf
 import itertools # for S&P 500
 # Scripts
-from config import last_checked_prices, sp500_last_checked_prices
-from storage import load_stocks, clean_symbol
+from src.config.config import last_checked_prices, sp500_last_checked_prices
+from src.config.storage import STOCK_SYMBOLS, clean_symbol
 
 def get_prices_fast():
     """
@@ -21,15 +21,13 @@ def get_prices_fast():
 
     stock_data = [] # store stock price data
     
-    stocks = load_stocks()
-    if not stocks:
+    if not STOCK_SYMBOLS:
         return stock_data
 
     # compare prices from last close to current price
+    tickers = yf.Tickers(' '.join(STOCK_SYMBOLS))
 
-    tickers = yf.Tickers(' '.join(stocks))
-
-    for symbol in stocks:
+    for symbol in STOCK_SYMBOLS:
         try:
             ticker = tickers.tickers[symbol]
 
@@ -74,19 +72,18 @@ def get_prices_batch(compare_to='previous_close'):
     # compare prices from last close to current price
     stock_data = [] # store stock price data
 
-    stocks = load_stocks()
-    if not stocks:
+    if not STOCK_SYMBOLS:
         return stock_data
 
-    symbols = ' '.join(stocks)
+    symbols = ' '.join(STOCK_SYMBOLS)
     data = yf.download(symbols, period = '5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
 
-    for symbol in stocks:
+    for symbol in STOCK_SYMBOLS:
         try:
             ticker = yf.Ticker(symbol)
             current_price = ticker.fast_info.last_price
 
-            if len(stocks) == 1:
+            if len(STOCK_SYMBOLS) == 1:
                 hist = data
             else:
                 hist = data[symbol]
@@ -138,8 +135,7 @@ def check_price_changes():
         list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
     """
     big_changes = []
-    stocks = load_stocks()
-    for symbol in stocks:
+    for symbol in STOCK_SYMBOLS:
         try:
             # get the ticker symbols
             ticker = yf.Ticker(symbol)
@@ -205,10 +201,8 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         batch = [next(sp500_cycle) for _ in range(batch_size)]
         big_movers = []
 
-        stocks = load_stocks()
-
         for symbol in batch:
-            if symbol not in stocks: #checks if s&p 500 symbol isn't already in watchlist
+            if symbol not in STOCK_SYMBOLS: #checks if s&p 500 symbol isn't already in watchlist
                 try:
                     yf_symbol = clean_symbol(symbol)
                     ticker = yf.Ticker(yf_symbol)

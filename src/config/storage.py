@@ -1,5 +1,5 @@
 import json
-from config import STOCK_FILE
+from src.config.config import STOCK_FILE
 
 # --- file management for stocks ---
 def load_stocks():
@@ -32,3 +32,5 @@ def save_stocks(stocks):
 def clean_symbol(symbol):
     """Convert symbol format for yfinance from dots to hyphens"""
     return symbol.replace('.','-')
+
+STOCK_SYMBOLS = load_stocks()
