@@ -7,7 +7,7 @@ import yfinance as yf
 from src.portfolios.database.procedures import *
 
 
-def portfolio_commands(bot, procedures):
+def setup_portfolio_commands(bot, conn):
     """Setup portfolio commands."""
 
     @bot.command()
@@ -18,7 +18,7 @@ def portfolio_commands(bot, procedures):
         Command:
         !create <portfolio_name> <initial_balance>
         """
-        result = create_portfolio(procedures, portfolio_name, initial_balance)
+        result = create_portfolio(conn, portfolio_name, initial_balance)
         await ctx.send(result)
     
     @bot.command()
@@ -30,7 +30,7 @@ def portfolio_commands(bot, procedures):
         !portfolios
         """
 
-        portfolios = list_portfolios(procedures)
+        portfolios = list_portfolios(conn)
 
         await ctx.send(portfolios)
 
@@ -43,7 +43,7 @@ def portfolio_commands(bot, procedures):
         !view <portfolio_name>
         """
 
-        details = view_portfolio(procedures, portfolio_name)
+        details = view_portfolio(conn, portfolio_name)
 
         await ctx.send(details)
     
@@ -56,6 +56,6 @@ def portfolio_commands(bot, procedures):
         !delete <portfolio_name>
         """
 
-        portfolio = delete_portfolio(procedures, portfolio_name)
+        portfolio = delete_portfolio(conn, portfolio_name)
 
         await ctx.send(portfolio)

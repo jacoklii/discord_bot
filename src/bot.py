@@ -19,6 +19,10 @@ from src.config.storage import STOCK_SYMBOLS, save_stocks
 from src.utils.stock_data import get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
 from src.utils.charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
 
+from src.portfolios.database.schema import create_database_schema
+from src.portfolios.portfolio import setup_portfolio_commands
+from src.config.config import get_portfolio_connection
+
 # --- Logging ---
 logging.getLogger('discord').setLevel(logging.WARNING)
 logging.getLogger('discord.http').setLevel(logging.WARNING)
@@ -84,7 +88,7 @@ async def price(ctx, *symbols):
     
     await ctx.send(embed=embed)
 
-# --- Manage Stocks Commands ---
+# --- Manage Watchlist Commands ---
 @bot.command()
 async def add(ctx, symbol):
     """
@@ -285,6 +289,12 @@ async def intervals(ctx):
     await ctx.send(embed=embed)
 
 
+# --- Portfolio Commands ---
+portfolio_db = get_portfolio_connection()
+create_database_schema(portfolio_db)
+
+setup_portfolio_commands(bot, portfolio_db)
+
 # --- Task loops ---
 # Send notification of stock prices and percent change
 report_time = dt.time(hour=9, minute=30, tzinfo=TIMEZONE)
@@ -465,5 +475,9 @@ async def sp500_movers_alert():
     else:
         print("S&P 500: Big price changes not found.")
 
+@bot.event
+async def on_close():
+    portfolio_db.close()
+    bot.loop.stop()
 
 bot.run(discord_token)

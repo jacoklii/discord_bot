@@ -16,7 +16,7 @@ def create_portfolio(conn, name, initial_balance):
     cur = conn.cursor()
     try:
         cur.execute('''
-                    INSERT INTO portfolios (name, balance, created_at)
+                    INSERT INTO portfolios (name, initial_balance, created_at)
                     VALUES (?, ?, ?)
                     ''', (name, initial_balance, timestamp_str)
         )
