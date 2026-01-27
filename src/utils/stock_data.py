@@ -233,3 +233,26 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
     except Exception as e:
         print(f'Error checking S&P 500: {e}')  
         return []
+
+
+def get_batch_prices(symbols):
+
+    if not symbols:
+        return {}
+    
+    try:
+        data = yf.download(symbols, period = '1d', interval='1d', group_by='ticker', progress=False)
+
+        prices = {}
+        for symbol in symbols:
+            if len(symbols) > 1:
+                prices[symbol] = float(data[symbol]['Close'].iloc[-1])
+            else:
+                prices[symbol] = float(data['Close'].iloc[-1])
+            
+        return prices
+    except Exception as e:
+        print(f'Batch fetching Error: {e}')
+        return {}
+    
+

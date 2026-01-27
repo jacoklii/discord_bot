@@ -1,6 +1,0 @@
-{
-    "python.defaultInterpreterPath": "${workspaceFolder}/bot-env/bin/python",
-    "python.analysis.extraPaths": [
-        "${workspaceFolder}/bot-env/lib/python3.13/site-packages"
-    ]
-}
