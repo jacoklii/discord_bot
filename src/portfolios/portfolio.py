@@ -73,19 +73,6 @@ def setup_portfolio_commands(bot, conn):
 
 
     @bot.command()
-    async def portfolios(ctx):
-        """
-        List all portfolios.
-
-        Command:
-        !portfolios
-        """
-
-        portfolios = list_portfolios(conn)
-
-        await ctx.send(portfolios)
-
-    @bot.command()
     async def view(ctx, portfolio_name: str):
         """
         View portfolio details.
