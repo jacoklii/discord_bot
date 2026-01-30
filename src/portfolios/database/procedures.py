@@ -40,17 +40,20 @@ def get_portfolio_balance(conn, portfolio_id):
     result = cur.fetchone()
     return result[0] if result else None
 
-def update_portfolio_balance(conn, portfolio_id, new_balance):
-    """Update portfolio balance in table."""
-    cur = conn.cursor()
-    cur.execute('''
-                UPDATE balances
-                SET balance = ?
-                WHERE portfolio_id = ?
-                ''', (new_balance, portfolio_id)
-    )
-    conn.commit()
-
+def update_portfolio_balance(conn, portfolio_id, new_balance, timestamp):
+    """Log portfolio balance into Balances table."""
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+                    INSERT INTO balances 
+                    (portfolio_id, balance, timestamp)
+                    VALUES (?, ?, ?)
+                    ''', (portfolio_id, new_balance, timestamp)
+        )
+        conn.commit()
+            
+    except sq.IntegrityError as e:
+        print(f'update_portfolio_balance() error: {e}')
 
 def create_portfolio(conn, name, initial_balance):
     """Create a new portfolio."""
@@ -111,8 +114,13 @@ def delete_portfolio(conn, name):
     portfolio_id = get_portfolio_id(conn, name)
     if not portfolio_id:
         return 0
+    
     cur.execute('''
                 DELETE FROM portfolios WHERE portfolio_id = ?
+                ''', (portfolio_id,)
+    )
+    cur.execute('''
+                DELETE FROM balances WHERE portfolio_id = ?
                 ''', (portfolio_id,)
     )
     conn.commit()
@@ -146,11 +154,9 @@ def insert_transaction(conn, portfolio_id, symbol, operation, shares, price_per_
     cur.execute('''
                 INSERT INTO transactions (portfolio_id, symbol, operation, shares, price_per_share, total_price, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (portfolio_id, symbol, operation, shares, price_per_share, total_price, timestamp)
+                ''', (portfolio_id, symbol.upper(), operation, shares, price_per_share, total_price, timestamp)
     )
     conn.commit()
-
-
 
 
 def buy_stock(conn, portfolio_name, symbol, shares):
@@ -158,9 +164,12 @@ def buy_stock(conn, portfolio_name, symbol, shares):
     portfolio_id = get_portfolio_id(conn, portfolio_name)
     if not portfolio_id:
         return f'portfolio {portfolio_name} not found.'
-
+    
+    symbol = symbol.upper()
     operation = 'BUY'
+
     ticker = yf.Ticker(symbol)
+
     current_price = ticker.fast_info.last_price
     if not current_price:
         return f'Error retrieving current price for {symbol}.'
@@ -172,7 +181,7 @@ def buy_stock(conn, portfolio_name, symbol, shares):
 
     # update portfolio balance to Balances
     new_balance = get_portfolio_balance(conn, portfolio_id) - total_price
-    update_portfolio_balance(conn, portfolio_id, new_balance)
+    update_portfolio_balance(conn, portfolio_id, new_balance, current_time)
 
     message = f"""
             Bought {shares} shares of {symbol}.
@@ -193,6 +202,7 @@ def sell_stock(conn, portfolio_name, symbol, shares):
     if not portfolio_id:
         return f'portfolio {portfolio_name} not found.'
 
+    symbol = symbol.upper()
     operation = 'SELL'
     ticker = yf.Ticker(symbol)
     current_price = ticker.fast_info.last_price
@@ -202,7 +212,7 @@ def sell_stock(conn, portfolio_name, symbol, shares):
     insert_transaction(conn, portfolio_id, symbol, operation, shares, current_price, total_price, current_time)
 
     new_balance = get_portfolio_balance(conn, portfolio_id) + total_price
-    update_portfolio_balance(conn, portfolio_id, new_balance)
+    update_portfolio_balance(conn, portfolio_id, new_balance, current_time)
 
     message = f"""
             Sold {shares} shares of {symbol}.
@@ -219,6 +229,7 @@ def sell_stock(conn, portfolio_name, symbol, shares):
 
 
 def view_portfolio(conn, name):
+    """View current data of a portfolio."""
 
     portfolio_id = get_portfolio_id(conn, name)
     if not portfolio_id:
@@ -227,7 +238,7 @@ def view_portfolio(conn, name):
     balance = get_portfolio_balance(conn, portfolio_id)
     holdings = get_holdings(conn, portfolio_id)
 
-    symbols = [row[0] for row in holdings]
+    symbols = [row[0].upper() for row in holdings]
     current_prices = get_batch_prices(symbols)
 
     holdings_str = ''
@@ -240,8 +251,13 @@ def view_portfolio(conn, name):
             if price:
                 stock_value = price * shares
                 holdings_value += stock_value
+                returns = stock_value - initial_value
+                returns_pc = (returns / initial_value) * 100
+                change_sign = '+' if returns >= 0 else ''
 
-                holdings_str += f'    {symbol}: Shares = {shares} | Stock Price = ${price:.2f} | Initial Value = ${initial_value:.2f} | Total Value = ${stock_value:.2f}\n'
+                holdings_str += f'''{symbol}: Shares = {shares} | Stock Price = ${price:.2f} 
+                                Initial Value = ${initial_value:.2f} | Total Value = ${stock_value:.2f} | Returns = {change_sign}${returns:.2f} ({change_sign}{returns_pc:.2f}%)\n
+                            '''
             else:
                 holdings_str += f'    {symbol}: Shares = {shares} | Initial Value = ${initial_value:.2f} (Current price unavailable.)\n'    
     else:
@@ -257,22 +273,20 @@ def view_portfolio(conn, name):
             {holdings_str}
             """.rstrip()
 
-    return result
-
 def list_portfolios(conn):
     """List all portfolios."""
-    result = ''
 
     cur = conn.cursor()
     cur.execute('''
-                SELECT name, initial_balance FROM portfolios
+                SELECT p.name, b.balance FROM balances b
+                JOIN portfolios p ON b.portfolio_id = p.portfolio_id
                 ''')
     portfolios =  cur.fetchall()
 
     if not portfolios:
         return 'No portfolios found.'
     
-    result += 'Portfolios:\n'
+    result = 'Portfolios:\n'
     for name, balance in portfolios:
         result += f"    {name}: Balance ${balance:,.2f}\n"
 

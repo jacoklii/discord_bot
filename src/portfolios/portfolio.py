@@ -1,3 +1,4 @@
+from IPython import embed
 import discord
 from discord.ext import commands
 import sqlite3 as sq
@@ -5,6 +6,7 @@ from datetime import datetime as dt
 import yfinance as yf
 
 from src.portfolios.database.procedures import *
+from src.portfolios.portfolio_logic import *
 
 
 def setup_portfolio_commands(bot, conn):
@@ -94,10 +96,47 @@ def setup_portfolio_commands(bot, conn):
         """
 
         details = view_portfolio(conn, portfolio_name)
-        await ctx.send(details)
+        
+        
+        embed = discord.Embed(
+            title=f'Portfolio Summary: {details["name"]}',
+            description=f'''
+            Current Balance: {details['balance']}
+            Total Holdings Value: {details['total_holdings_value']}
+            Total Portfolio Value: {details['total_value']}
+            Total Returns: {details['total_returns']}
+            ''',
+            color = discord.Color.blue()
+        )
+
+        embed.add_field(name='\u200b', value='\u200b', inline=False)
+        embed.add_field(name='Holdings:', value='\u200b', inline=False)
+
+        for holdings in details['current_holdings']:
+
+            if 'total_value' not in holdings:
+                embed.add_field(
+                    name=holdings['symbol'],
+                    value=f'''
+                    Shares: {holdings["shares"]}
+                    Initial Value: {holdings["initial_value"]}
+                    (Current price unavailable.)
+                ''', inline=True)
+            else:  
+                embed.add_field(
+                    name=holdings['symbol'],
+                    value=f'''
+                    Price: {holdings["price"]}
+                    Shares: {holdings["shares"]}
+                    Initial Value: {holdings["initial_value"]}
+                    Total Value: {holdings['total_value']}
+                    Returns: {holdings['returns']}''', inline=True)
+
+        await ctx.send(embed=embed)
+
 
     @bot.command()
-    async def buy(ctx, portfolio_name: str, symbol, shares) -> str:
+    async def buy(ctx, portfolio_name: str, symbol, shares):
         """
         Buy shares of a stock to a portfolio.
 
@@ -105,11 +144,25 @@ def setup_portfolio_commands(bot, conn):
         !buy <portfolio_name> <stock_symbol> <amount_of_shares>
         """
 
-        summary = buy_stock(conn, portfolio_name, symbol, shares)
-        await ctx.send(summary)
+        details = buy_stock(conn, portfolio_name, symbol, shares)
+        
+        embed = discord.Embed(
+            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}',
+            description=f'''
+            Operation: BUY
+            Total Shares: {shares}
+            Price-Per-Share: ${details['price_per_share']:.2f}
+            Total Price: ${details['total_price']:.2f}
+            New Balance: ${details['new_balance']:.2f}
+            ''',
+            color = discord.Color.green()
+        )
+        embed.set_footer(text=f'At: {details["timestamp"]}')
+
+        await ctx.send(embed=embed)
 
     @bot.command()
-    async def sell(ctx, portfolio_name: str, symbol, shares) -> str:
+    async def sell(ctx, portfolio_name: str, symbol, shares):
         """
         Sell shares of a stock to a portfolio.
 
@@ -117,5 +170,19 @@ def setup_portfolio_commands(bot, conn):
         !sell <portfolio_name> <stock_symbol> <amount_of_shares>
         """
 
-        summary = sell_stock(conn, portfolio_name, symbol, shares)
-        await ctx.send(summary)
+        details = sell_stock(conn, portfolio_name, symbol, shares)
+
+        embed = discord.Embed(
+            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}',
+            description=f'''
+            Operation: BUY
+            Total Shares: {shares}
+            Price-Per-Share: ${details['price_per_share']:.2f}
+            Total Price: ${details['total_price']:.2f}
+            New Balance: ${details['new_balance']:.2f}
+            ''',
+            color = discord.Color.green()
+        )
+        embed.set_footer(text=f'At: {details["timestamp"]}')
+
+        await ctx.send(embed=embed)

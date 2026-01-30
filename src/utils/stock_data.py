@@ -78,48 +78,33 @@ def get_prices_batch(compare_to='previous_close'):
     symbols = ' '.join(STOCK_SYMBOLS)
     data = yf.download(symbols, period = '5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
 
-    for symbol in STOCK_SYMBOLS:
-        try:
-            ticker = yf.Ticker(symbol)
-            current_price = ticker.fast_info.last_price
+   
+        # get reference price on monday for week start comparison
+    if compare_to == 'week_start':
+        hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False, auto_adjust=False)
+        hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
 
-            if len(STOCK_SYMBOLS) == 1:
-                hist = data
-            else:
-                hist = data[symbol]
-            
-            if hist.empty or len(hist) < 2:
-                continue
+        if not hist_5m.empty:
+            reference_price = float(hist_5m['Close'].iloc[0])
+        # quick fallback if market was closed on monday
+        else:
+            reference_price = float(hist['Close'].iloc[-2])
 
-            # get reference price on monday for week start comparison
-            if compare_to == 'week_start':
-                hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False, auto_adjust=False)
-                hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
+    # default to get yesterdays price
+    else:
+        reference_price = float(hist['Close'].iloc[-2])
 
-                if not hist_5m.empty:
-                    reference_price = float(hist_5m['Close'].iloc[0])
-                # quick fallback if market was closed on monday
-                else:
-                    reference_price = float(hist['Close'].iloc[-2])
+    change = float(current_price - reference_price)
+    percentage_change = float((current_price - reference_price) / reference_price) * 100
 
-            # default to get yesterdays price
-            else:
-                reference_price = float(hist['Close'].iloc[-2])
-
-            change = float(current_price - reference_price)
-            percentage_change = float((current_price - reference_price) / reference_price) * 100
-
-            # add data captured to the stock data list
-            stock_data.append({
-                'symbol': symbol,
-                'current_price': float(current_price),
-                'percentage_change': percentage_change,
-                'change': change
-            })
-        
-        except Exception as e:
-            print(f'Error getting data for {symbol}: {e}')
-            continue
+    # add data captured to the stock data list
+    stock_data.append({
+        'symbol': symbol,
+        'current_price': float(current_price),
+        'percentage_change': percentage_change,
+        'change': change
+    })
+    
 
     return stock_data
 
@@ -235,24 +220,44 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         return []
 
 
-def get_batch_prices(symbols):
+def get_batch_prices(symbols, compare_to='previous_close'):
 
-    if not symbols:
-        return {}
-    
+    tickers = [clean_symbol(sym) for sym in symbols]
+    symbols_str = ' '.join(tickers)
+        
+    data = yf.download(symbols_str, period='5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
+            
+    prices = {}
+
     try:
-        data = yf.download(symbols, period = '1d', interval='1d', group_by='ticker', progress=False)
+        if len(symbols) == 1:
+            # handle yfinance MultiIndex columns (ticker, field) and plain columns
+            if isinstance(data.columns, pd.MultiIndex):
+                # use ticker name (tickers list) as first level
+                close_series = data[(tickers[0], 'Close')]
+            # if 'Close' in data.columns:
+            #     close_series = data['Close']
+            last_close = close_series.dropna().iloc[-1]
+            prices[symbols[0]] = float(last_close)
 
-        prices = {}
-        for symbol in symbols:
-            if len(symbols) > 1:
-                prices[symbol] = float(data[symbol]['Close'].iloc[-1])
-            else:
-                prices[symbol] = float(data['Close'].iloc[-1])
+        else:
+            for symbol in symbols:
+                if isinstance(data.columns, pd.MultiIndex) and symbol in data.columns.get_level_values(0):
+                    price = data[(symbol, 'Close')].dropna().iloc[-1]
+                    prices[symbol] = float(price)
+                # else:
+                #     # data['Close'] may be a DataFrame with symbols as columns
+                #     if 'Close' in data.columns and symbol in data['Close'].columns:
+                #         price = data['Close'][symbol].dropna().iloc[-1]
+                #         prices[symbol] = float(price)
+
+        # if compare_to == None:
+        #     return prices
+        
+        # if compare_to == 'previous_close':
+        #     hist_5m = yf.download(symbols_str, period='5d', interval='5m', progress=False, auto_adjust=False)
             
         return prices
+        
     except Exception as e:
-        print(f'Batch fetching Error: {e}')
-        return {}
-    
-
+        print("Error getting close for", symbols[0], e)

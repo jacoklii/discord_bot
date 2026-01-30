@@ -16,7 +16,7 @@ import logging
 # Scripts
 from src.config.config import CHANNEL_ID, TIMEZONE, TIME_NOW, discord_token
 from src.config.storage import STOCK_SYMBOLS, save_stocks
-from src.utils.stock_data import get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
+from src.utils.stock_data import get_batch_prices, get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
 from src.utils.charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
 
 from src.portfolios.database.schema import create_database_schema
@@ -133,7 +133,7 @@ async def watchlist(ctx):
         await ctx.send(f'Watchlist is empty. Please use !add <symbol> to add stocks.')
         return
 
-    stock_data = get_prices_fast()
+    stock_data = get_batch_prices(STOCK_SYMBOLS)
 
     if stock_data:
         embed = discord.Embed(
