@@ -5,7 +5,8 @@ import yfinance as yf
 import sqlite3 as sq
 import datetime as dt
 
-from src.portfolios.database.procedures import *
+from src.portfolios.database.procedures import get_portfolio_id, get_portfolio_balance, update_portfolio_balance, insert_transaction, get_holdings
+from src.utils.stock_data import get_batch_prices
 
 def buy_stock(conn, portfolio_name, symbol, shares):
     """Buy stock shares"""

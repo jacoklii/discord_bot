@@ -1,4 +1,3 @@
-from IPython import embed
 import discord
 from discord.ext import commands
 import sqlite3 as sq
