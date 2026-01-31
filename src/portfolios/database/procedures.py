@@ -134,6 +134,7 @@ def get_holdings(conn, portfolio_id):
     cur.execute('''
                 SELECT 
                 symbol,
+                sector,
                 SUM(CASE WHEN operation = 'BUY' THEN shares ELSE -shares END) AS total_shares,
                 SUM(CASE WHEN operation = 'BUY' THEN shares * price_per_share ELSE -(shares * price_per_share) END) AS initial_price
                 FROM transactions
@@ -146,12 +147,12 @@ def get_holdings(conn, portfolio_id):
     results = cur.fetchall()
     return results
 
-def insert_transaction(conn, portfolio_id, symbol, operation, shares, price_per_share, total_price, timestamp):
+def insert_transaction(conn, portfolio_id, symbol, sector, operation, shares, price_per_share, total_price, timestamp):
     """Insert a new transaction into transaction table."""
     cur = conn.cursor()
     cur.execute('''
-                INSERT INTO transactions (portfolio_id, symbol, operation, shares, price_per_share, total_price, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (portfolio_id, symbol.upper(), operation, shares, price_per_share, total_price, timestamp)
+                INSERT INTO transactions (portfolio_id, symbol, sector, operation, shares, price_per_share, total_price, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (portfolio_id, symbol.upper(), sector, operation, shares, price_per_share, total_price, timestamp)
     )
     conn.commit()

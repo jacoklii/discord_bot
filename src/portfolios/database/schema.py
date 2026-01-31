@@ -20,6 +20,7 @@ def create_database_schema(conn):
                     transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     portfolio_id INTEGER NOT NULL,
                     symbol TEXT NOT NULL,
+                    sector TEXT NOT NULL,
                     operation TEXT NOT NULL,
                     shares INTEGER NOT NULL,
                     price_per_share REAL NOT NULL,

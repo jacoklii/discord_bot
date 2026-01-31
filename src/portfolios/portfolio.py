@@ -6,6 +6,7 @@ import yfinance as yf
 
 from src.portfolios.database.procedures import *
 from src.portfolios.portfolio_logic import *
+from src.config.utils import is_market_open, is_weekend
 
 
 def setup_portfolio_commands(bot, conn):
@@ -31,6 +32,22 @@ def setup_portfolio_commands(bot, conn):
 
         except Exception as e:
             await ctx.send(f'Error creating portfolio: {e}')
+
+    @bot.command()
+    async def balance(ctx, portfolio_name: str):
+        """
+        Check portfolio balance.
+        
+        Command:
+        !balance <portfolio_name>
+        """
+        try:
+            balance = portfolio_balance(conn, portfolio_name)
+
+            await ctx.send(f'Portfolio {portfolio_name} balance: {balance["balance"]}')
+        
+        except Exception as e:
+            print(f'Error retrieving balance for {portfolio_name}: {e}')
 
     @bot.command()
     async def rename(ctx, old_name: str, new_name: str):
@@ -73,24 +90,24 @@ def setup_portfolio_commands(bot, conn):
 
 
     @bot.command()
-    async def view(ctx, portfolio_name: str):
+    async def summary(ctx, portfolio_name: str):
         """
         View portfolio details.
 
         Command:
-        !view <portfolio_name>
+        !summary <portfolio_name>
         """
 
-        details = view_portfolio(conn, portfolio_name)
+        holdings_data = portfolio_summary(conn, portfolio_name)
         
         
         embed = discord.Embed(
-            title=f'Portfolio Summary: {details["name"]}',
+            title=f'Portfolio Summary: {holdings_data["name"]}',
             description=f'''
-            Current Balance: {details['balance']}
-            Total Holdings Value: {details['total_holdings_value']}
-            Total Portfolio Value: {details['total_value']}
-            Total Returns: {details['total_returns']}
+            Current Balance: {holdings_data['balance']}
+            Total Holdings Value: {holdings_data['total_holdings_value']}
+            Total Portfolio Value: {holdings_data['total_value']}
+            Total Returns: {holdings_data['total_returns']}
             ''',
             color = discord.Color.blue()
         )
@@ -98,28 +115,33 @@ def setup_portfolio_commands(bot, conn):
         embed.add_field(name='\u200b', value='\u200b', inline=False)
         embed.add_field(name='Holdings:', value='\u200b', inline=False)
 
-        for holdings in details['current_holdings']:
+        for sector, holdings_list in holdings_data['current_holdings'].items():
 
-            if 'total_value' not in holdings:
-                embed.add_field(
-                    name=holdings['symbol'],
-                    value=f'''
-                    Shares: {holdings["shares"]}
-                    Initial Value: {holdings["initial_value"]}
-                    (Current price unavailable.)
-                ''', inline=True)
-            else:  
-                embed.add_field(
-                    name=holdings['symbol'],
-                    value=f'''
-                    Price: {holdings["price"]}
-                    Shares: {holdings["shares"]}
-                    Initial Value: {holdings["initial_value"]}
-                    Total Value: {holdings['total_value']}
-                    Returns: {holdings['returns']}''', inline=True)
+            embed.add_field(
+                name=f'Sector: {sector}',
+                value='\u200b',
+                inline=False
+            )
+            for holdings in holdings_list:
+                if 'total_value' not in holdings:
+                    embed.add_field(
+                        name=holdings['symbol'],
+                        value=f'''
+                        Shares: {holdings["shares"]}
+                        Initial Value: {holdings["initial_value"]}
+                        (Current price unavailable.)
+                    ''', inline=True)
+                else:  
+                    embed.add_field(
+                        name=holdings['symbol'],
+                        value=f'''
+                        Price: {holdings["price"]}
+                        Shares: {holdings["shares"]}
+                        Initial Value: {holdings["initial_value"]}
+                        Total Value: {holdings['total_value']}
+                        Returns: {holdings['returns']}''', inline=True)
 
         await ctx.send(embed=embed)
-
 
     @bot.command()
     async def buy(ctx, portfolio_name: str, symbol, shares):
@@ -129,6 +151,15 @@ def setup_portfolio_commands(bot, conn):
         Command:
         !buy <portfolio_name> <stock_symbol> <amount_of_shares>
         """
+
+        symbol = symbol.upper()
+
+        if is_weekend:
+            await ctx.send(f'Market is closed on weekends. Cannot execute buy order for {symbol}.')
+            return
+        if not is_market_open(after_hours=False):
+            await ctx.send(f'Market is closed. Cannot execute buy order for {symbol}.')
+            return
 
         details = buy_stock(conn, portfolio_name, symbol, shares)
         
@@ -156,12 +187,21 @@ def setup_portfolio_commands(bot, conn):
         !sell <portfolio_name> <stock_symbol> <amount_of_shares>
         """
 
+        symbol = symbol.upper()
+
+        if is_weekend:
+            await ctx.send(f'Market is closed on weekends. Cannot execute sell order for {symbol}.')
+            return
+        if not is_market_open(after_hours=False):
+            await ctx.send(f'Market is closed. Cannot execute sell order for {symbol}.')
+            return
+        
         details = sell_stock(conn, portfolio_name, symbol, shares)
 
         embed = discord.Embed(
-            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}',
+            title=f'Sold {shares} shares of {symbol} for portfolio: {portfolio_name}',
             description=f'''
-            Operation: BUY
+            Operation: SELL
             Total Shares: {shares}
             Price-Per-Share: ${details['price_per_share']:.2f}
             Total Price: ${details['total_price']:.2f}
@@ -172,3 +212,4 @@ def setup_portfolio_commands(bot, conn):
         embed.set_footer(text=f'At: {details["timestamp"]}')
 
         await ctx.send(embed=embed)
+    
