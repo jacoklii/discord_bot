@@ -29,8 +29,4 @@ def save_stocks(stocks):
     with open(STOCK_FILE, 'w') as f:
         json.dump({'symbols': stocks}, f, indent=2)
 
-def clean_symbol(symbol):
-    """Convert symbol format for yfinance from dots to hyphens"""
-    return symbol.replace('.','-')
-
 STOCK_SYMBOLS = load_stocks()
