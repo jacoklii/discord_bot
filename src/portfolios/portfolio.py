@@ -4,6 +4,7 @@ import sqlite3 as sq
 from datetime import datetime as dt
 import yfinance as yf
 
+from src.stock_data import get_asset_type
 from src.portfolios.database.procedures import *
 from src.portfolios.portfolio_logic import *
 from src.config.utils import is_market_open, is_weekend
@@ -98,16 +99,16 @@ def setup_portfolio_commands(bot, conn):
         !summary <portfolio_name>
         """
 
-        holdings_data = portfolio_summary(conn, portfolio_name)
+        summary_data = portfolio_data(conn, portfolio_name)
         
         
         embed = discord.Embed(
-            title=f'Portfolio Summary: {holdings_data["name"]}',
+            title=f'Portfolio Summary: {summary_data["name"]}',
             description=f'''
-            Current Balance: {holdings_data['balance']}
-            Total Holdings Value: {holdings_data['total_holdings_value']}
-            Total Portfolio Value: {holdings_data['total_value']}
-            Total Returns: {holdings_data['total_returns']}
+            Current Balance: {summary_data['balance']}
+            Total Holdings Value: {summary_data['total_holdings_value']}
+            Total Portfolio Value: {summary_data['total_value']}
+            Total Returns: {summary_data['total_returns']}
             ''',
             color = discord.Color.blue()
         )
@@ -115,7 +116,7 @@ def setup_portfolio_commands(bot, conn):
         embed.add_field(name='\u200b', value='\u200b', inline=False)
         embed.add_field(name='Holdings:', value='\u200b', inline=False)
 
-        for sector, holdings_list in holdings_data['current_holdings'].items():
+        for sector, holdings_list in summary_data['current_holdings'].items():
 
             embed.add_field(
                 name=f'Sector: {sector}',
@@ -144,6 +145,57 @@ def setup_portfolio_commands(bot, conn):
         await ctx.send(embed=embed)
 
     @bot.command()
+    async def holdings(ctx, portfolio_name: str):
+        """
+        Docstring for holdings
+        
+        :param ctx: Description
+        :param portfolio_name: Description
+        :type portfolio_name: str
+        """
+
+        holdings_data = portfolio_data(conn, portfolio_name)
+
+        embed = discord.Embed(
+            title=f'Portfolio Holdings: {holdings_data['name']}',
+            color=discord.Color.blue()
+        )
+
+        for sector, holdings_list in holdings_data['current_holdings'].items():
+            
+            embed.add_field(
+                name=f'Sector: {sector}',
+                value='\u200b',
+                inline=False
+            )
+            for holdings in holdings_list:
+                if 'total_value' not in holdings:
+                    embed.add_field(
+                        name=holdings['symbol'],
+                        value=f'''
+                        Shares: {holdings["shares"]}
+                        Initial Value: {holdings["initial_value"]}
+                        (Current price unavailable.)
+                        ''',
+                        inline=True
+                    )
+                else:  
+                    embed.add_field(
+                        name=holdings['symbol'],
+                        value=f'''
+                        Price: {holdings["price"]}
+                        Shares: {holdings["shares"]}
+                        Initial Value: {holdings["initial_value"]}
+                        Total Value: {holdings['total_value']}
+                        Returns: {holdings['returns']} 
+                        ''',
+                        inline=True
+                    )
+        
+        await ctx.send(embed=embed)
+
+
+    @bot.command()
     async def buy(ctx, portfolio_name: str, symbol, shares):
         """
         Buy shares of a stock to a portfolio.
@@ -154,23 +206,24 @@ def setup_portfolio_commands(bot, conn):
 
         symbol = symbol.upper()
 
-        if is_weekend:
+        if is_weekend():
             await ctx.send(f'Market is closed on weekends. Cannot execute buy order for {symbol}.')
             return
-        if not is_market_open(after_hours=False):
+        if is_market_open(symbol) == False:
             await ctx.send(f'Market is closed. Cannot execute buy order for {symbol}.')
             return
 
         details = buy_stock(conn, portfolio_name, symbol, shares)
-        
+        asset_type = get_asset_type(symbol)
+
         embed = discord.Embed(
-            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}',
+            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {asset_type}',
             description=f'''
             Operation: BUY
             Total Shares: {shares}
-            Price-Per-Share: ${details['price_per_share']:.2f}
-            Total Price: ${details['total_price']:.2f}
-            New Balance: ${details['new_balance']:.2f}
+            Price-Per-Share: ${details['price_per_share']}
+            Total Price: ${details['total_price']}
+            New Balance: ${details['new_balance']}
             ''',
             color = discord.Color.green()
         )
@@ -197,15 +250,16 @@ def setup_portfolio_commands(bot, conn):
             return
         
         details = sell_stock(conn, portfolio_name, symbol, shares)
+        asset_type = get_asset_type(symbol)
 
         embed = discord.Embed(
-            title=f'Sold {shares} shares of {symbol} for portfolio: {portfolio_name}',
+            title=f'Sold {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {asset_type}',
             description=f'''
             Operation: SELL
             Total Shares: {shares}
-            Price-Per-Share: ${details['price_per_share']:.2f}
-            Total Price: ${details['total_price']:.2f}
-            New Balance: ${details['new_balance']:.2f}
+            Price-Per-Share: ${details['price_per_share']}
+            Total Price: ${details['total_price']}
+            New Balance: ${details['new_balance']}
             ''',
             color = discord.Color.green()
         )

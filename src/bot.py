@@ -16,8 +16,9 @@ import logging
 # Scripts
 from src.config.config import CHANNEL_ID, TIMEZONE, TIME_NOW, discord_token
 from src.config.storage import STOCK_SYMBOLS, save_stocks
-from src.utils.stock_data import get_batch_prices, get_prices_fast, get_prices_batch, check_price_changes, get_sp500_movers
-from src.utils.charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
+from src.config.utils import clean_symbol, percent_change
+from src.stock_data import get_batch_prices, check_price_changes, get_sp500_movers #, get_price_comparison
+from src.charts import create_stock_graph, create_candlestick_graph, create_bollinger_bands
 
 from src.portfolios.database.schema import create_database_schema
 from src.portfolios.portfolio import setup_portfolio_commands
@@ -43,8 +44,8 @@ async def on_ready():
     Starts the periodic background tasks if they are not already running.
     """
     print(f'We have logged in as {bot.user}')
-    if not market_open_report.is_running():
-        market_open_report.start()
+    #if not market_open_report.is_running():
+       # market_open_report.start()
     if not check_big_changes.is_running():
         check_big_changes.start()
     if not sp500_movers_alert.is_running():
@@ -141,10 +142,10 @@ async def watchlist(ctx):
             color=discord.Color.blue()
             )
  
-        for stock in stock_data:
+        for symbol, price in stock_data.items():
             embed.add_field(
-                name=f"{stock['symbol']}",
-                value=f'${stock["current_price"]:.2f}'
+                name=symbol,
+                value=f'${price:.2f}'
             )
 
         await ctx.send(embed=embed)
@@ -296,85 +297,95 @@ create_database_schema(portfolio_db)
 setup_portfolio_commands(bot, portfolio_db)
 
 # --- Task loops ---
-# Send notification of stock prices and percent change
-report_time = dt.time(hour=9, minute=30, tzinfo=TIMEZONE)
-@tasks.loop(time=report_time)
+# report_time = dt.time(hour=9, minute=30, tzinfo=TIMEZONE)
+@tasks.loop(minutes=1)
 async def market_open_report():
     """ 
     Periodic task that runs at market open (9:30am EST) on weekdays to send
     a summary report of the stock prices in watchlist and runs a weekend 
     summary of the previous week's performance on Saturdays to the channel. 
     """
+    pass
+    # print(f"[{TIME_NOW}] Sending market open report...")
 
-    print(f"[{TIME_NOW}] Sending market open report...")
+    # channel = bot.get_channel(CHANNEL_ID)
 
-    channel = bot.get_channel(CHANNEL_ID)
+    # if not channel:
+    #     print(f'Channel {CHANNEL_ID} not found')
+    #     return
+    # if not STOCK_SYMBOLS:
+    #     await channel.send('No stocks in watchlist.')
+    #     return
 
-    # fallback for channel id not found
-    if not channel:
-        print(f'Channel {CHANNEL_ID} not found')
-        return
+    # current_prices = get_batch_prices(STOCK_SYMBOLS)
+    # comparison_prices = get_price_comparison(STOCK_SYMBOLS, compare_to='week')
+    
+    # stock_data = []
+    # for symbol in STOCK_SYMBOLS:
+    #     if symbol in current_prices and symbol in comparison_prices:
+    #         current_price = current_prices[symbol]
+    #         compare_price = comparison_prices[symbol]
+    #         percentage_change, change = percent_change(current_price, compare_price)
+            
+    #         stock_data.append({
+    #             'symbol': symbol,
+    #             'current_price': current_price,
+    #             'percentage_change': percentage_change,
+    #             'change': change
+    #         })
 
-    # fallback for no stocks in watchlist
-    if not STOCK_SYMBOLS:
-        await channel.send('No stocks in watchlist.')
-        return
-
-    is_weekend = TIME_NOW.weekday() >= 5
-    stock_data = get_prices_batch(compare_to='week_start' if is_weekend else 'previous_close')
-
-    if stock_data:
-        # message format: embed
-        if is_weekend:
-            embed = discord.Embed(
-                title='Weekend Market Report',
-                description='Market is closed on weekends.',
-                color=discord.Color.blue(),
-                timestamp=dt.datetime.now(),
-                )
-        else:
-            embed = discord.Embed(
-                title='Market Open Report = 9:30 AM EST',
-                color=discord.Color.green(),
-                timestamp=dt.datetime.now(),
-                )
+    # if stock_data:
+    #     if is_weekend():
+    #         embed = discord.Embed(
+    #             title='Weekend Market Report',
+    #             description='Market is closed on weekends.',
+    #             color=discord.Color.blue(),
+    #             timestamp=dt.datetime.now(),
+    #             )
+    #     else:
+    #         embed = discord.Embed(
+    #             title='Market Open Report = 9:30 AM EST',
+    #             color=discord.Color.green(),
+    #             timestamp=dt.datetime.now(),
+    #             )
         
-        # give percentage change greater than 0 or less than 0 a different color
-        for stock in stock_data:
-            star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
-            change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
-            change_sign = "+" if stock['change'] >= 0 else ""
+    #     for stock in stock_data:
+    #         star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
+    #         change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
+    #         change_sign = "+" if stock['change'] >= 0 else ""
 
-            # add stock info to embed parameters
-            embed.add_field(
-                name=f"{star} {change_emoji} {stock['symbol']}",
-                value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
-                inline=True
-            )
+    #         embed.add_field(
+    #             name=f"{star} {change_emoji} {stock['symbol']}",
+    #             value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
+    #             inline=True
+    #         )
+    #     await channel.send(embed=embed)
+    # else:
+    #     await channel.send('Could not get stock prices/data.')
 
-        # send Graphs for each chart
-        files = []
-        for stock in stock_data:
-            if abs(stock['percentage_change']) >= 1:
-                if is_weekend:
-                    graph = create_bollinger_bands(stock['symbol'], period='5d', interval='60m', after_hours=True)
-                elif TIME_NOW.weekday() == 0: # Monday: last market open (Friday) for reference
-                    graph = create_stock_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
-                else: # last market open (Tuesday - Friday) for reference
-                    graph = create_stock_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
+    # #     # send Graphs for each chart
+    # #     files = [] 
+    # #     for stock in stock_data:
+    # #         if abs(stock['percentage_change']) >= 1:
+    # #             if is_weekend:
+    # #                 graph = create_bollinger_bands(stock['symbol'], period='5d', interval='60m', after_hours=True)
+    # #             elif TIME_NOW.weekday() == 0: # Monday: last market open (Friday) for reference
+    # #                 graph = create_stock_graph(stock['symbol'], period='3d', interval='15m', after_hours=True)
+    #             else: # last market open (Tuesday - Friday) for reference
+    #                 graph = create_stock_graph(stock['symbol'], period='2d', interval='15m', after_hours=True)
 
-                if graph:
-                    files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
+    #             if graph:
+    #                 files.append(discord.File(graph, filename=f"{stock['symbol']}_chart.png"))
 
-        # send embed through the message type, send all charts at once
-        if files:
-            await channel.send(embed=embed, files=files)
-        else:
-            await channel.send(embed=embed)
-            failed_symbols = [stock['symbol'] for stock in stock_data]
-            await channel.send(f"Could not generate charts for {', '.join(failed_symbols)}")
-    else:
-        await channel.send('Could not get stock prices/data')
+    #     # send embed through the message type, send all charts at once
+    #     if files:
+    #         await channel.send(embed=embed, files=files)
+    #     else:
+    #         await channel.send(embed=embed)
+    #         failed_symbols = [stock['symbol'] for stock in stock_data]
+    #         await channel.send(f"Could not generate charts for {', '.join(failed_symbols)}")
+    # else:
+    #     await channel.send('Could not get stock prices/data')
 
 # send Alert if stock price made a big change
 @tasks.loop(minutes=5)
@@ -398,7 +409,7 @@ async def check_big_changes():
         print(f'Channel {CHANNEL_ID} not found')
         return
 
-    big_changes = check_price_changes()
+    big_changes = check_price_changes(STOCK_SYMBOLS, percent_threshold=1)
 
     # statement to detect if big changes is True
     if big_changes:

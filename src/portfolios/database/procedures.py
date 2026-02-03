@@ -31,7 +31,8 @@ def get_portfolio_balance(conn, portfolio_id):
     """Get portfolio balance from table."""
     cur = conn.cursor()
     cur.execute('''
-                SELECT balance FROM balances WHERE portfolio_id = ?
+                SELECT balance FROM balances WHERE portfolio_id = ? 
+                ORDER BY balance_id DESC LIMIT 1
                 ''', (portfolio_id,)
     )
 

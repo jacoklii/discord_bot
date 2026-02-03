@@ -1,4 +1,8 @@
-from src.config.config import TIMEZONE, TIME_NOW
+import datetime as dt
+import pytz
+
+TIMEZONE = pytz.timezone('US/Eastern')
+TIME_NOW = dt.datetime.now(TIMEZONE)
 
 def percent_change(current, reference):
     """Calculate percentage change and compare reference to current value."""
@@ -23,18 +27,46 @@ def is_weekend() -> bool:
     """Check if the current day is a weekend."""
     return TIME_NOW.weekday() >= 5
 
-def is_market_open(current_time=None, after_hours=False) -> bool:
+def is_weekday() -> bool:
+    """Check if the current day is a weekday."""
+    return TIME_NOW.weekday() < 5
+
+def is_market_open(symbol, after_hours=False) -> bool:
     """Check if the stock market is currently open."""
-    if current_time is None:
-        current_time = TIME_NOW
+    from src.stock_data import get_asset_type
     
     # Market hours: 9:30 AM to 4:00 PM Eastern Time, Monday to Friday
-    market_open = current_time.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = current_time.replace(hour=16, minute=0, second=0, microsecond=0)
     
-    is_weekday = current_time.weekday() < 5
-    if after_hours:
-        market_close = current_time.replace(hour=20, minute=0, second=0, microsecond=0)
-        market_open = current_time.replace(hour=4, minute=0, second=0, microsecond=0)
+    asset_type = get_asset_type(symbol)
+    weekday = TIME_NOW.weekday()
+    hour = TIME_NOW.hour
+    minute = TIME_NOW.minute
 
-    return is_weekday and (market_open <= current_time <= market_close)
+    if asset_type == 'crypto':
+        return True
+
+    if asset_type in ['commodity', 'futures']:
+        sunday_before_5pm = weekday == 6 and hour < 17 
+        friday_after_5pm = weekday == 4 and hour >= 17
+        is_saturday = weekday == 5
+        trade_break = hour == 16
+
+        return not (is_saturday or sunday_before_5pm or friday_after_5pm or trade_break)
+
+    if asset_type == 'forex':
+        sunday_before_5pm = weekday == 6 and hour < 17
+        friday_after_5pm = weekday == 4 and hour >= 17
+
+        return not (sunday_before_5pm or friday_after_5pm)
+    
+
+    if is_weekend():
+        return False
+    
+    if after_hours:
+        return 4 < hour < 20
+    
+    if hour < 9 or (hour == 9 and minute < 30) or hour >= 16:
+        return False
+    
+    return True

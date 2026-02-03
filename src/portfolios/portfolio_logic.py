@@ -20,7 +20,7 @@ def buy_stock(conn, portfolio_name, symbol, shares):
 
     ticker = yf.Ticker(symbol)
 
-    sector = ticker.info.get('sector')
+    sector = ticker.info['sector'] if ticker.info and 'sector' in ticker.info else 'N/A'
 
     current_price = ticker.fast_info.last_price
     if not current_price:
@@ -35,15 +35,14 @@ def buy_stock(conn, portfolio_name, symbol, shares):
     new_balance = get_portfolio_balance(conn, portfolio_id) - total_price
     update_portfolio_balance(conn, portfolio_id, new_balance, current_time)
 
-
     result = {
         'portfolio_name': portfolio_name,
         'symbol': symbol,
         'shares': shares,
         'operation': operation,
-        'price_per_share': f'${current_price:.2f}',
-        'total_price': f'${total_price:.2f}',
-        'new_balance': f'${new_balance:.2f}',
+        'price_per_share': f'${current_price:,.2f}',
+        'total_price': f'${total_price:,.2f}',
+        'new_balance': f'${new_balance:,.2f}',
         'timestamp': current_time
     }
     return result
@@ -81,7 +80,7 @@ def sell_stock(conn, portfolio_name, symbol, shares):
     }
     return result
 
-def portfolio_summary(conn, name):
+def portfolio_data(conn, name):
     """View current data of a portfolio."""
 
     portfolio_id = get_portfolio_id(conn, name)

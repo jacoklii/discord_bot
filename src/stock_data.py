@@ -1,114 +1,14 @@
 import requests
 import pandas as pd
 import yfinance as yf
-import itertools # for S&P 500
+import itertools 
 # Scripts
 from src.config.config import last_checked_prices, sp500_last_checked_prices
-from src.config.storage import STOCK_SYMBOLS, clean_symbol
-
-def get_prices_fast():
-    """
-    Get fast, real-time price fetch for commands to retrieve current prices 
-    and percent changes for symbols in the watchlist.
-
-    Returns:
-        list[dict]: A list where each item contains keys:
-            - 'symbol': stock symbol (str)
-            - 'current_price': latest price (float)
-            - 'percentage_change': percent difference vs reference (float)
-            - 'change': absolute difference vs reference (float)
-    """
-
-    stock_data = [] # store stock price data
-    
-    if not STOCK_SYMBOLS:
-        return stock_data
-
-    # compare prices from last close to current price
-    tickers = yf.Tickers(' '.join(STOCK_SYMBOLS))
-
-    for symbol in STOCK_SYMBOLS:
-        try:
-            ticker = tickers.tickers[symbol]
-
-            current_price = float(ticker.fast_info.last_price)
-            prev_close = float(ticker.fast_info.previous_close)
-
-            change = float(current_price - prev_close)
-            percentage_change = float((current_price - prev_close) / prev_close) * 100
-
-            # add data captured to the stock data list
-            stock_data.append({
-                'symbol': symbol,
-                'current_price': current_price,
-                'percentage_change': percentage_change,
-                'change': change
-            })
-        
-        except Exception as e:
-            print(f'Error getting data for {symbol}: {e}')
-            continue
-
-    return stock_data
-
-def get_prices_batch(compare_to='previous_close'):
-    """
-    Retrieve current prices and percent changes for symbols in the watchlist.
-
-    Args:
-        compare_to (str): Reference price used to compute change. Supported
-            values: 'previous_close' (default) or 'week_start'.
-
-    Returns:
-        list[dict]: A list where each item contains keys:
-            - 'symbol': stock symbol (str)
-            - 'current_price': latest price (float)
-            - 'percentage_change': percent difference vs reference (float)
-            - 'change': absolute difference vs reference (float)
-    """
+from src.config.storage import STOCK_SYMBOLS
+from src.config.utils import clean_symbol, percent_change
 
 
-
-    # compare prices from last close to current price
-    stock_data = [] # store stock price data
-
-    if not STOCK_SYMBOLS:
-        return stock_data
-
-    symbols = ' '.join(STOCK_SYMBOLS)
-    data = yf.download(symbols, period = '5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
-
-   
-        # get reference price on monday for week start comparison
-    if compare_to == 'week_start':
-        hist_5m = yf.download(symbol, period='5d', interval='5m', progress=False, auto_adjust=False)
-        hist_5m = hist_5m[hist_5m.index.dayofweek == 0]
-
-        if not hist_5m.empty:
-            reference_price = float(hist_5m['Close'].iloc[0])
-        # quick fallback if market was closed on monday
-        else:
-            reference_price = float(hist['Close'].iloc[-2])
-
-    # default to get yesterdays price
-    else:
-        reference_price = float(hist['Close'].iloc[-2])
-
-    change = float(current_price - reference_price)
-    percentage_change = float((current_price - reference_price) / reference_price) * 100
-
-    # add data captured to the stock data list
-    stock_data.append({
-        'symbol': symbol,
-        'current_price': float(current_price),
-        'percentage_change': percentage_change,
-        'change': change
-    })
-    
-
-    return stock_data
-
-def check_price_changes():
+def check_price_changes(symbols, percent_threshold=1):
     """
     Compare current prices to the last saved checks and return symbols with
     significant short-term moves.
@@ -120,7 +20,7 @@ def check_price_changes():
         list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
     """
     big_changes = []
-    for symbol in STOCK_SYMBOLS:
+    for symbol in symbols:
         try:
             # get the ticker symbols
             ticker = yf.Ticker(symbol)
@@ -129,16 +29,16 @@ def check_price_changes():
 
             # check if stock symbol is in last checked prices to move on with the function
             if symbol in last_checked_prices:
-                last_price = last_checked_prices[symbol] # gets the last checked price and compares percentage to it
+                last_price = last_checked_prices[symbol]
+                percentage_change, change = percent_change(current_price, last_price)
 
-                percentage_change = ((current_price - last_price) / last_price) * 100
-
-                # checks the pecent change if the absolute value is greater than 1
-                if abs(percentage_change) >= 1:
+                # checks the pecent change if the absolute value is greater than percent_threshold
+                if abs(percentage_change) >= percent_threshold:
                     big_changes.append({
                         'symbol': symbol,
                         'current_price': current_price,
                         'last_price': last_price,
+                        'change': change,
                         'percentage_change': percentage_change,
                     })
 
@@ -220,8 +120,18 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         return []
 
 
-def get_batch_prices(symbols, compare_to='previous_close'):
+def get_batch_prices(symbols):
+    """
+    batch processing to get stock price data for multiple symbols.
+    Use price_change=True to get percent change vs compare_to price.
+    
+    :param symbols: list of symbols
+    :param price_change: bool, whether to compute price change info
+    :param compare_to: 'previous_close' or 'start_of_day' for price comparison
 
+    :return: dict of symbol to last close price, or dict with price change info
+
+    """
     tickers = [clean_symbol(sym) for sym in symbols]
     symbols_str = ' '.join(tickers)
         
@@ -235,15 +145,14 @@ def get_batch_prices(symbols, compare_to='previous_close'):
             if isinstance(data.columns, pd.MultiIndex):
                 # use ticker name (tickers list) as first level
                 close_series = data[(tickers[0], 'Close')]
-            # if 'Close' in data.columns:
-            #     close_series = data['Close']
-            last_close = close_series.dropna().iloc[-1]
+
+            last_close = close_series.iloc[-1]
             prices[symbols[0]] = float(last_close)
 
         else:
             for symbol in symbols:
                 if isinstance(data.columns, pd.MultiIndex) and symbol in data.columns.get_level_values(0):
-                    price = data[(symbol, 'Close')].dropna().iloc[-1]
+                    price = data[(symbol, 'Close')].iloc[-1]
                     prices[symbol] = float(price)
                 # else:
                 #     # data['Close'] may be a DataFrame with symbols as columns
@@ -251,13 +160,97 @@ def get_batch_prices(symbols, compare_to='previous_close'):
                 #         price = data['Close'][symbol].dropna().iloc[-1]
                 #         prices[symbol] = float(price)
 
-        # if compare_to == None:
-        #     return prices
-        
-        # if compare_to == 'previous_close':
-        #     hist_5m = yf.download(symbols_str, period='5d', interval='5m', progress=False, auto_adjust=False)
-            
         return prices
         
     except Exception as e:
         print("Error getting close for", symbols[0], e)
+
+def get_price_comparison(symbols, compare_to='day'):
+    if not symbols:
+        return {}
+    
+    tickers = [clean_symbol(sym) for sym in symbols]
+    symbols_str = ' '.join(tickers)
+    comparison = {}
+
+    try:
+        data = yf.download(symbols_str, period='5d', interval='1d', progress=False, auto_adjust=False)
+        
+        if len(symbols) == 1:
+
+            if isinstance(data.columns, pd.MultiIndex):
+                close_series = data[(tickers[0], 'Close')]
+            else:
+                close_series = data['Close']
+
+            if compare_to == 'day':
+                compare_price = close_series.iloc[-2]
+            elif compare_to == 'week':
+                compare_price = close_series.iloc[-5]
+            else:
+                raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
+            
+            comparison[symbols[0]] = float(compare_price)
+
+        else:
+            for symbol in symbols:
+                try:
+                    if isinstance(data.columns, pd.MultiIndex):
+
+                        if compare_to == 'day':
+                            compare_price = data[(symbol, 'Close')].iloc[-2]
+                        elif compare_to == 'week':
+                            compare_price = data[(symbol, 'Close')].iloc[-5]
+                        else:
+                            raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
+                        
+                        comparison[symbols] = float(compare_price)
+
+                except Exception as e:
+                    print(f"Error processing {symbol}: {e}")
+                    continue
+
+        return comparison
+    except Exception as e:
+        print(f"get_price_comparison Error for {symbols}: {e}")
+        return {}
+
+
+def get_asset_type(symbol):
+    """
+    Determine if a symbol is a stock or cryptocurrency.
+
+    Notation:
+    '^' prefix for market indices (e.g. ^GSPC)
+    '=F' suffix for futures contracts (e.g. ES=F)
+    '=X' suffix for forex pairs (e.g. EURUSD=X)
+    '-USD' suffix for cryptocurrencies (e.g. BTC-USD)
+
+
+    Args:
+        symbol (str): The ticker symbol to check.
+    Returns:
+        str: 'index' if the symbol is a market index
+        str: 'futures' if it's a futures contract
+        str: 'forex' if it's a forex pair
+        str: 'crypto' if the symbol is a cryptocurrency
+        str: 'commodity' if it's a commodity (e.g. gold, oil)
+        str: 'stock' otherwise.
+    """
+
+    crypto_suffixes = ['-USD', '-USDT', '-USDC', '-DAI']
+    commodity_symbols = ['GC=F', 'CL=F', 'SI=F', 'NG=F']  # Gold, Crude Oil, Silver, Natural Gas
+    
+    if symbol.startswith('^'):
+        return 'index'
+    elif any(symbol.endswith(suffix) for suffix in crypto_suffixes):
+        return 'crypto'
+    elif symbol in commodity_symbols:
+        return 'commodity'
+    elif symbol.endswith('=F'):
+        return 'futures'
+    elif symbol.endswith('=X'):
+        return 'forex'
+    else:
+        return 'stock'
+
