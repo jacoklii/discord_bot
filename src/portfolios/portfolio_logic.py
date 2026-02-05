@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from src.portfolios.database.procedures import get_portfolio_id, get_portfolio_balance, update_portfolio_balance, insert_transaction, get_holdings
 from src.stock_data import get_batch_prices
+from src.stock_data import get_asset_type
 
 def buy_stock(conn, portfolio_name, symbol, shares):
     """Buy stock shares"""
@@ -20,8 +21,9 @@ def buy_stock(conn, portfolio_name, symbol, shares):
 
     ticker = yf.Ticker(symbol)
 
-    sector = ticker.info['sector'] if ticker.info and 'sector' in ticker.info else 'N/A'
+    asset_type = get_asset_type(symbol).capitalize()
 
+    sector = ticker.info['sector'] if 'sector' in ticker.info else asset_type
     current_price = ticker.fast_info.last_price
     if not current_price:
         return f'Error retrieving current price for {symbol}.'
@@ -37,6 +39,7 @@ def buy_stock(conn, portfolio_name, symbol, shares):
 
     result = {
         'portfolio_name': portfolio_name,
+        'asset_type': asset_type,
         'symbol': symbol,
         'shares': shares,
         'operation': operation,
@@ -57,13 +60,14 @@ def sell_stock(conn, portfolio_name, symbol, shares):
 
     ticker = yf.Ticker(symbol)
 
-    sector = ticker.info.get('sector')
+    asset_type = get_asset_type(symbol).capitalize()
+    sector = ticker.info.get('sector') if 'sector' in ticker.info else asset_type
 
     current_price = ticker.fast_info.last_price
     total_price = current_price * float(shares)
     current_time = dt.datetime.now().strftime('%Y-%m-%d %H:%M')
     operation = 'SELL'
-    insert_transaction(conn, portfolio_id, symbol, sector, operation, shares, current_price=current_price, total_price=total_price, current_time=current_time)
+    insert_transaction(conn, portfolio_id, symbol, sector, operation, shares, current_price, total_price, current_time)
 
     new_balance = get_portfolio_balance(conn, portfolio_id) + total_price
     update_portfolio_balance(conn, portfolio_id, new_balance, current_time)
@@ -71,6 +75,7 @@ def sell_stock(conn, portfolio_name, symbol, shares):
 
     result = {
         'portfolio_name': portfolio_name,
+        'asset_type': asset_type,
         'symbol': symbol,
         'shares': shares,
         'price_per_share': f'${current_price:.2f}',

@@ -214,16 +214,15 @@ def setup_portfolio_commands(bot, conn):
             return
 
         details = buy_stock(conn, portfolio_name, symbol, shares)
-        asset_type = get_asset_type(symbol)
 
         embed = discord.Embed(
-            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {asset_type}',
+            title=f'Bought {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {details["asset_type"]}',
             description=f'''
             Operation: BUY
             Total Shares: {shares}
-            Price-Per-Share: ${details['price_per_share']}
-            Total Price: ${details['total_price']}
-            New Balance: ${details['new_balance']}
+            Price-Per-Share: {details['price_per_share']}
+            Total Price: {details['total_price']}
+            New Balance: {details['new_balance']}
             ''',
             color = discord.Color.green()
         )
@@ -242,24 +241,20 @@ def setup_portfolio_commands(bot, conn):
 
         symbol = symbol.upper()
 
-        if is_weekend:
-            await ctx.send(f'Market is closed on weekends. Cannot execute sell order for {symbol}.')
-            return
-        if not is_market_open(after_hours=False):
-            await ctx.send(f'Market is closed. Cannot execute sell order for {symbol}.')
+        if is_market_open(symbol) == False:
+            await ctx.send(f'Market is closed. Cannot execute sell order for {symbol} {is_market_open(symbol)}.')
             return
         
         details = sell_stock(conn, portfolio_name, symbol, shares)
-        asset_type = get_asset_type(symbol)
 
         embed = discord.Embed(
-            title=f'Sold {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {asset_type}',
+            title=f'Sold {shares} shares of {symbol} for portfolio: {portfolio_name}\nAsset Type: {details["asset_type"]}',
             description=f'''
             Operation: SELL
             Total Shares: {shares}
-            Price-Per-Share: ${details['price_per_share']}
-            Total Price: ${details['total_price']}
-            New Balance: ${details['new_balance']}
+            Price-Per-Share: {details['price_per_share']}
+            Total Price: {details['total_price']}
+            New Balance: {details['new_balance']}
             ''',
             color = discord.Color.green()
         )

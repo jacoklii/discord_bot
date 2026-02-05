@@ -230,7 +230,7 @@ def get_asset_type(symbol):
     Args:
         symbol (str): The ticker symbol to check.
     Returns:
-        str: 'index' if the symbol is a market index
+        str: 'etf' if the symbol is a market index
         str: 'futures' if it's a futures contract
         str: 'forex' if it's a forex pair
         str: 'crypto' if the symbol is a cryptocurrency
@@ -242,7 +242,7 @@ def get_asset_type(symbol):
     commodity_symbols = ['GC=F', 'CL=F', 'SI=F', 'NG=F']  # Gold, Crude Oil, Silver, Natural Gas
     
     if symbol.startswith('^'):
-        return 'index'
+        return 'etf'
     elif any(symbol.endswith(suffix) for suffix in crypto_suffixes):
         return 'crypto'
     elif symbol in commodity_symbols:
