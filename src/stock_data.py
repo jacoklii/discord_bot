@@ -120,19 +120,19 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         return []
 
 
-def get_batch_prices(symbols):
+def get_batch_prices(symbols, price_change=False, compare_to='week'):
     """
     batch processing to get stock price data for multiple symbols.
     Use price_change=True to get percent change vs compare_to price.
     
     :param symbols: list of symbols
     :param price_change: bool, whether to compute price change info
-    :param compare_to: 'previous_close' or 'start_of_day' for price comparison
+    :param compare_to: 'week' or 'day' for price comparison
 
     :return: dict of symbol to last close price, or dict with price change info
 
     """
-    tickers = [clean_symbol(sym) for sym in symbols]
+    tickers = [sym for sym in symbols]
     symbols_str = ' '.join(tickers)
         
     data = yf.download(symbols_str, period='5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
@@ -141,78 +141,60 @@ def get_batch_prices(symbols):
 
     try:
         if len(symbols) == 1:
-            # handle yfinance MultiIndex columns (ticker, field) and plain columns
             if isinstance(data.columns, pd.MultiIndex):
-                # use ticker name (tickers list) as first level
-                close_series = data[(tickers[0], 'Close')]
+                close_series = data[symbols[0]]['Close']
 
             last_close = close_series.iloc[-1]
-            prices[symbols[0]] = float(last_close)
+
+            if price_change:
+                if compare_to == 'day':
+                    compare_price = close_series.iloc[-2]
+                elif compare_to == 'week':
+                    compare_price = close_series.iloc[-5]
+                else:
+                    raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
+
+                percentage_change, change = percent_change(last_close, compare_price)
+
+                prices[symbols[0]] = {
+                    'last_close': float(last_close),
+                    'compare_price': float(compare_price),
+                    'change': change,
+                    'percentage_change': percentage_change
+                }
+            else:
+                prices[symbols[0]] = float(last_close)
 
         else:
             for symbol in symbols:
-                if isinstance(data.columns, pd.MultiIndex) and symbol in data.columns.get_level_values(0):
-                    price = data[(symbol, 'Close')].iloc[-1]
-                    prices[symbol] = float(price)
-                # else:
-                #     # data['Close'] may be a DataFrame with symbols as columns
-                #     if 'Close' in data.columns and symbol in data['Close'].columns:
-                #         price = data['Close'][symbol].dropna().iloc[-1]
-                #         prices[symbol] = float(price)
+                if isinstance(data.columns, pd.MultiIndex):
+                    close_series = data[symbol]['Close']
+
+                last_close = close_series.iloc[-1]
+
+                if price_change:
+                    if compare_to == 'day':
+                        compare_price = close_series.iloc[-2]
+                    elif compare_to == 'week':
+                        compare_price = close_series.iloc[-5]
+                    else:
+                        raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
+                    
+                    percentage_change, change = percent_change(last_close, compare_price)
+
+                    prices[symbol] = {
+                        'last_close': float(last_close),
+                        'compare_price': float(compare_price),
+                        'change': change,
+                        'percentage_change': percentage_change
+                    }
+                else:
+                    prices[symbol] = float(last_close)
 
         return prices
-        
-    except Exception as e:
-        print("Error getting close for", symbols[0], e)
-
-def get_price_comparison(symbols, compare_to='day'):
-    if not symbols:
-        return {}
     
-    tickers = [clean_symbol(sym) for sym in symbols]
-    symbols_str = ' '.join(tickers)
-    comparison = {}
-
-    try:
-        data = yf.download(symbols_str, period='5d', interval='1d', progress=False, auto_adjust=False)
-        
-        if len(symbols) == 1:
-
-            if isinstance(data.columns, pd.MultiIndex):
-                close_series = data[(tickers[0], 'Close')]
-            else:
-                close_series = data['Close']
-
-            if compare_to == 'day':
-                compare_price = close_series.iloc[-2]
-            elif compare_to == 'week':
-                compare_price = close_series.iloc[-5]
-            else:
-                raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
-            
-            comparison[symbols[0]] = float(compare_price)
-
-        else:
-            for symbol in symbols:
-                try:
-                    if isinstance(data.columns, pd.MultiIndex):
-
-                        if compare_to == 'day':
-                            compare_price = data[(symbol, 'Close')].iloc[-2]
-                        elif compare_to == 'week':
-                            compare_price = data[(symbol, 'Close')].iloc[-5]
-                        else:
-                            raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
-                        
-                        comparison[symbols] = float(compare_price)
-
-                except Exception as e:
-                    print(f"Error processing {symbol}: {e}")
-                    continue
-
-        return comparison
     except Exception as e:
-        print(f"get_price_comparison Error for {symbols}: {e}")
+        print(f"Error getting close for {symbol}: {e}")
         return {}
 
 

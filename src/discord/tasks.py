@@ -3,14 +3,13 @@ from discord.ext import tasks
 
 from src.config.config import TIMEZONE, TIME_NOW, CHANNEL_ID
 from src.config.storage import STOCK_SYMBOLS
-from src.stock_data import check_price_changes, get_sp500_movers
 import datetime as dt
 from datetime import datetime
 import asyncio
 from functools import partial
 
 from src.config.utils import is_weekend
-from src.stock_data import get_batch_prices, get_price_comparison, get_sp500_movers, percent_change
+from src.stock_data import get_batch_prices, check_price_changes, get_sp500_movers
 
 def setup_tasks(bot):
     # --- Task loops ---
@@ -22,7 +21,7 @@ def setup_tasks(bot):
         a summary report of the stock prices in watchlist and runs a weekend 
         summary of the previous week's performance on Saturdays to the channel. 
         """
-        pass
+        await bot.wait_until_ready()
         print(f"[{TIME_NOW}] Sending market open report...")
 
         channel = bot.get_channel(CHANNEL_ID)
@@ -34,23 +33,18 @@ def setup_tasks(bot):
             await channel.send('No stocks in watchlist.')
             return
 
-        current_prices = get_batch_prices(STOCK_SYMBOLS)
-        comparison_prices = get_price_comparison(STOCK_SYMBOLS, compare_to='week')
-        
+        prices = get_batch_prices(STOCK_SYMBOLS, price_change=True, compare_to='day')
+
         stock_data = []
         for symbol in STOCK_SYMBOLS:
-            if symbol in current_prices and symbol in comparison_prices:
-                current_price = current_prices[symbol]
-                compare_price = comparison_prices[symbol]
-                percentage_change, change = percent_change(current_price, compare_price)
+            if symbol in prices and isinstance(prices[symbol], dict):
                 
                 stock_data.append({
                     'symbol': symbol,
-                    'current_price': current_price,
-                    'percentage_change': percentage_change,
-                    'change': change
+                    'current_price': prices[symbol]['last_close'],
+                    'percentage_change': prices[symbol]['percentage_change'],
+                    'change': prices[symbol]['change']
                 })
-
         if stock_data:
             if is_weekend():
                 embed = discord.Embed(
@@ -178,3 +172,9 @@ def setup_tasks(bot):
 
         else:
             print("S&P 500: Big price changes not found.")
+
+    return {
+        'market_open_report': market_open_report,
+        'check_big_changes': check_big_changes,
+        'sp500_movers_alert': sp500_movers_alert
+    }

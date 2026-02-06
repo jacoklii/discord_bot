@@ -24,8 +24,14 @@ async def on_ready():
     if not bot.is_ready():
         await bot.wait_until_ready()
         print(f"Bot is ready. Logged in as {bot.user}.")
-    if not setup_tasks.is_running():
-        setup_tasks.start()
+
+    global task_dict
+
+    for task_name, task in task_dict.items():
+
+        if not task.is_running():
+            task.start()
+            print(f'Started {task_name} task.')
 
 setup_watchlist_commands(bot)
 setup_chart_commands(bot)
@@ -34,7 +40,7 @@ portfolio_db = get_portfolio_connection()
 create_database_schema(portfolio_db)
 setup_portfolio_commands(bot, portfolio_db)
 
-setup_tasks(bot)
+task_dict = setup_tasks(bot)
 
 @bot.event
 async def on_close():
