@@ -132,7 +132,7 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
     :return: dict of symbol to last close price, or dict with price change info
 
     """
-    tickers = [sym for sym in symbols]
+    tickers = [clean_symbol(sym) for sym in symbols]
     symbols_str = ' '.join(tickers)
         
     data = yf.download(symbols_str, period='5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
@@ -219,20 +219,13 @@ def get_asset_type(symbol):
         str: 'commodity' if it's a commodity (e.g. gold, oil)
         str: 'stock' otherwise.
     """
-
-    crypto_suffixes = ['-USD', '-USDT', '-USDC', '-DAI']
-    commodity_symbols = ['GC=F', 'CL=F', 'SI=F', 'NG=F']  # Gold, Crude Oil, Silver, Natural Gas
+    commodity_symbols = ['GC=F', 'CL=F', 'SI=F', 'HG=F']  # Gold, Crude Oil, Silver, Copper futures
     
-    if symbol.startswith('^'):
-        return 'etf'
-    elif any(symbol.endswith(suffix) for suffix in crypto_suffixes):
-        return 'crypto'
-    elif symbol in commodity_symbols:
-        return 'commodity'
-    elif symbol.endswith('=F'):
-        return 'futures'
-    elif symbol.endswith('=X'):
-        return 'forex'
+    ticker = yf.Ticker(symbol)
+    asset = ticker.info.get('quoteType')
+
+    if symbol in commodity_symbols:
+        return 'COMMODITY'
     else:
-        return 'stock'
+        return asset
 
