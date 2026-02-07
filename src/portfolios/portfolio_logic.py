@@ -163,3 +163,43 @@ def portfolio_balance(conn, name):
     
     return result
 
+def get_asset_weights(conn, name):
+    """Get current weights of assets in a portfolio."""
+
+    portfolio_id = get_portfolio_id(conn, name)
+    if not portfolio_id:
+        return f"Portfolio '{name}' not found."
+    
+    holdings = get_holdings(conn, portfolio_id)
+    
+    asset_weights = {}
+    symbols = [row[0].upper() for row in holdings]
+    current_prices = get_batch_prices(symbols)
+
+    total_shares = 0
+    total_initial_value = 0
+    total_current_value = 0
+
+    for symbol, sector, shares, initial_value in holdings:
+        current_price = current_prices.get(symbol, 0)
+        current_value = current_price * shares if current_price else 0
+
+        total_initial_value += initial_value
+        total_current_value += current_value
+        total_shares += shares
+
+    for symbol, sector, shares, initial_value in holdings:
+        asset_type = get_asset_type(symbol).capitalize()
+
+        if asset_type not in asset_weights:
+            asset_weights[asset_type] = {
+                'share_weight': 0,
+                'current_value_weight': 0,
+                'initial_value_weight': 0
+            }
+        
+        asset_weights[asset_type]['share_weight'] += shares / total_shares if total_shares else 0
+        asset_weights[asset_type]['current_value_weight'] += current_value / total_current_value if total_current_value else 0
+        asset_weights[asset_type]['initial_value_weight'] += initial_value / total_initial_value if total_initial_value else 0
+
+    return asset_weights

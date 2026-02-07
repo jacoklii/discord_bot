@@ -145,9 +145,39 @@ def setup_portfolio_commands(bot, conn):
         await ctx.send(embed=embed)
 
     @bot.command()
+    async def assets(ctx, portfolio_name: str):
+        """
+        Check total value of a portfolio.
+        
+        Command: !assets <portfolio_name>
+        """
+        try:
+            asset_metrics = get_asset_weights(conn, portfolio_name)
+
+            description = f''
+            for asset_name, metrics in asset_metrics.items():
+        
+                description += f"""
+                Asset_type: {asset_name}
+                Shares Metric: {metrics['share_weight']:.2%}
+                Initial Value Metric: {metrics['initial_value_weight']:.2%}
+                Value Metric: {metrics['current_value_weight']:.2%}
+                """
+
+            embed = discord.Embed(
+                title=f'Portfolio Holdings: {portfolio_name}',
+                description=f'{description}',
+                color=discord.Color.blue()
+            )  
+
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f'Error retrieving asset data for {portfolio_name}: {e}')
+
+    @bot.command()
     async def holdings(ctx, portfolio_name: str):
         """
-        Docstring for holdings
+        View portfolio holdings
         
         :param ctx: Description
         :param portfolio_name: Description
@@ -157,7 +187,7 @@ def setup_portfolio_commands(bot, conn):
         holdings_data = portfolio_data(conn, portfolio_name)
 
         embed = discord.Embed(
-            title=f'Portfolio Holdings: {holdings_data['name']}',
+            title=f'Portfolio Holdings: {portfolio_name}',
             color=discord.Color.blue()
         )
 
