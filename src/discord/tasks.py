@@ -12,7 +12,7 @@ from src.config.utils import is_weekend
 from src.stock_data import get_batch_prices, check_price_changes, get_sp500_movers
 
 def setup_tasks(bot):
-    # --- Task loops ---
+    """Setup periodic background tasks for the Discord bot."""
     report_time = dt.time(hour=9, minute=30, tzinfo=TIMEZONE)
     @tasks.loop(hours=24)
     async def market_open_report():
@@ -74,9 +74,8 @@ def setup_tasks(bot):
         else:
             await channel.send('Could not get stock prices/data.')
 
-    # send Alert if stock price made a big change
     @tasks.loop(minutes=5)
-    async def check_big_changes():
+    async def watchlist_changes():
         """
         Periodic task that runs every five minutes during market hours to check
         the watchlist for large price movements and post alerts to the channel.
@@ -122,7 +121,6 @@ def setup_tasks(bot):
         else:
             print("WATCHLIST: Big price changes not found.")
 
-    # Send S&P 500 Movers Alerts
     @tasks.loop(minutes=15)
     async def sp500_movers_alert():
         """
@@ -175,6 +173,6 @@ def setup_tasks(bot):
 
     return {
         'market_open_report': market_open_report,
-        'check_big_changes': check_big_changes,
+        'watchlist_changes': watchlist_changes,
         'sp500_movers_alert': sp500_movers_alert
     }

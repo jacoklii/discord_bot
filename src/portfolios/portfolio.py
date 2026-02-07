@@ -292,3 +292,54 @@ def setup_portfolio_commands(bot, conn):
 
         await ctx.send(embed=embed)
     
+def setup_portfolio_tasks(bot, conn):
+    """Setup portfolio-related background tasks."""
+    
+    from src.config.config import CHANNEL_ID, TIME_NOW
+    from src.stock_data import check_price_changes
+
+    async def portfolio_changes(portfolio_name):
+        """ 
+        Detect large price changes for stocks in portfolios and send alerts to discord channel. 
+        """
+        await bot.wait_until_ready()
+        
+        if TIME_NOW.weekday() >= 5:
+            return
+        if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30) or TIME_NOW.hour > 16:
+            return
+
+        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Checking for big changes...")
+
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel:
+            print(f'Channel {CHANNEL_ID} not found')
+            return
+        
+        portfolio_id = get_portfolio_id(conn, portfolio_name)
+        symbols = get_symbols(conn, portfolio_id)
+
+        big_changes = check_price_changes(symbols, percent_threshold=1)
+
+        if big_changes:
+            print(f"PORTFOLIO - {portfolio_name}: Big price changes found.")
+
+            symbols = ', '.join(stock['symbol'] for stock in big_changes)
+            embed = discord.Embed(
+                title=f"ALERT: Big Price Movement for {symbols} in Portfolio {portfolio_name}",
+                color=discord.Color.red(),
+                timestamp=TIME_NOW,
+                )
+
+            for stock in big_changes:
+                star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
+                change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
+                change_sign = "+" if stock['change'] >= 0 else ""
+
+                embed.add_field(
+                    name=f"{star} {change_emoji} {stock['symbol']}",
+                    value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
+                    inline=True
+                )
+            await channel.send(embed=embed)
+

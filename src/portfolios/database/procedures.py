@@ -54,6 +54,7 @@ def update_portfolio_balance(conn, portfolio_id, new_balance, timestamp):
     except sq.IntegrityError as e:
         print(f'update_portfolio_balance() error: {e}')
 
+
 def create_portfolio(conn, name, initial_balance):
     """Create a new portfolio."""
 
@@ -83,7 +84,6 @@ def create_portfolio(conn, name, initial_balance):
     except sq.IntegrityError as e:
         print(f'create_portfolio() error: {e}')
         return f'Portfolio {name} already exists.'
-
 
 def update_portfolio_name(conn, old_name, new_name):
     """Update portfolio name in table."""
@@ -147,6 +147,15 @@ def get_holdings(conn, portfolio_id):
 
     results = cur.fetchall()
     return results
+
+def get_symbols(conn, portfolio_id):
+    """Get a list of all symbols in a portfolio."""
+    cur = conn.cursor()
+    cur.execute('''
+                SELECT DISTINCT symbol FROM transactions
+                WHERE portfolio_id = ?
+                ''', portfolio_id
+                )
 
 def insert_transaction(conn, portfolio_id, symbol, sector, operation, shares, price_per_share, total_price, timestamp):
     """Insert a new transaction into transaction table."""
