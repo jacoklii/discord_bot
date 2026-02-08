@@ -1,14 +1,12 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import sqlite3 as sq
-from datetime import datetime as dt
-import yfinance as yf
 
-from src.stock_data import get_asset_type
 from src.portfolios.database.procedures import *
 from src.portfolios.portfolio_logic import *
 from src.config.utils import is_market_open, is_weekend
 
+ACTIVATE_TASKS = {}
 
 def setup_portfolio_commands(bot, conn):
     """Setup portfolio commands."""
@@ -88,7 +86,6 @@ def setup_portfolio_commands(bot, conn):
             except Exception as e:
                 await ctx.send(f'Error deleting portfolio')
                 print(e)
-
 
     @bot.command()
     async def summary(ctx, portfolio_name: str):
@@ -224,7 +221,6 @@ def setup_portfolio_commands(bot, conn):
         
         await ctx.send(embed=embed)
 
-
     @bot.command()
     async def buy(ctx, portfolio_name: str, symbol, shares):
         """
@@ -291,14 +287,106 @@ def setup_portfolio_commands(bot, conn):
         embed.set_footer(text=f'At: {details["timestamp"]}')
 
         await ctx.send(embed=embed)
-    
-def setup_portfolio_tasks(bot, conn):
+
+    @bot.command()
+    async def tasks(ctx, portfolio_name: str):
+        """
+        Register a portfolio for periodic reports and alerts.
+
+        Command:
+        !tasks <portfolio_name>
+        """
+
+        if not get_portfolio_id(conn, portfolio_name):
+            await ctx.send(f'Portfolio {portfolio_name} not found. Please create the portfolio before registering for tasks.')
+            return
+        if portfolio_name in ACTIVATE_TASKS:
+            await ctx.send(f'Portfolio {portfolio_name} is already registered for tasks.')
+            return
+        
+        try:
+            task_funcs = setup_portfolio_tasks(bot, conn, portfolio_name)
+            task_funcs['portfolio_market_open_report'].start(portfolio_name)
+            task_funcs['portfolio_changes'].start(portfolio_name)
+
+            ACTIVATE_TASKS[portfolio_name] = task_funcs
+
+            await ctx.send(f'Portfolio {portfolio_name} registered for periodic reports and alerts.')
+
+        except Exception as e:
+            await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}: {e}')
+            print(f"Error starting tasks for portfolio '{portfolio_name}': {e}")
+
+def setup_portfolio_tasks(bot, conn, portfolio_name):
     """Setup portfolio-related background tasks."""
     
     from src.config.config import CHANNEL_ID, TIME_NOW
     from src.stock_data import check_price_changes
 
-    async def portfolio_changes(portfolio_name):
+    if not portfolio_name:
+            return "No portfolio is registered. Please use '!tasks <portfolio name>' to register a portfolio for reports & alerts.\n"
+    
+    @tasks.loop(hours=24)
+    async def protfolio_market_open_report():
+        """
+        Send a market open report for a specific portfolio.
+        
+        :param portfolio_name: Description
+        """
+
+        await bot.wait_until_ready()
+
+        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
+
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel:
+            print(f'Channel {CHANNEL_ID} not found')
+            return
+        
+        portfolio_id = get_portfolio_id(conn, portfolio_name)
+        symbols = get_symbols(conn, portfolio_id)
+
+        prices = get_batch_prices(symbols, price_change=True, compare_to='week' if is_weekend() else 'day')
+
+        stock_data = []
+        for symbol in symbols:
+            stock_data.append({
+                'symbol': symbol,
+                'current_price': prices[symbol]['last_close'],
+                'percentage_change': prices[symbol]['percentage_change'],
+                'change': prices[symbol]['change']
+            })
+        await channel.send(embed=embed)
+
+        if stock_data:
+            if is_weekend():
+                embed = discord.Embed(
+                    title=f'PORTFOLIO - {portfolio_name} Weekend Market Report',
+                    description='Market is closed on weekends.',
+                    color=discord.Color.green(),
+                    timestamp=TIME_NOW
+                )
+            else: 
+                embed = discord.Embed(
+                    title=f'PORTFOLIO - {portfolio_name} Market Open Report',
+                    color=discord.Color.green(),
+                    timestamp=TIME_NOW
+                )
+            for stock in stock_data:
+                change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
+                change_sign = "+" if stock['change'] >= 0 else ""
+
+                embed.add_field(
+                        name=f"{change_emoji} {stock['symbol']}",
+                        value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%",
+                        inline=True
+                )
+            await channel.send(embed=embed)
+        else:
+            await channel.send('Could not get stock prices/data.')
+
+    @tasks.loop(minutes=5)
+    async def portfolio_changes():
         """ 
         Detect large price changes for stocks in portfolios and send alerts to discord channel. 
         """
@@ -343,3 +431,7 @@ def setup_portfolio_tasks(bot, conn):
                 )
             await channel.send(embed=embed)
 
+    return {
+        'portfolio_market_open_report': protfolio_market_open_report,
+        'portfolio_changes': portfolio_changes
+    }

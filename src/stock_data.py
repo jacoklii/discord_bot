@@ -202,22 +202,15 @@ def get_asset_type(symbol):
     """
     Determine if a symbol is a stock or cryptocurrency.
 
-    Notation:
-    '^' prefix for market indices (e.g. ^GSPC)
-    '=F' suffix for futures contracts (e.g. ES=F)
-    '=X' suffix for forex pairs (e.g. EURUSD=X)
-    '-USD' suffix for cryptocurrencies (e.g. BTC-USD)
-
-
     Args:
         symbol (str): The ticker symbol to check.
     Returns:
-        str: 'etf' if the symbol is a market index
-        str: 'futures' if it's a futures contract
-        str: 'forex' if it's a forex pair
-        str: 'crypto' if the symbol is a cryptocurrency
-        str: 'commodity' if it's a commodity (e.g. gold, oil)
-        str: 'stock' otherwise.
+        str: 'ETF' if the symbol is a market index
+        str: 'Futures' if it's a futures contract
+        str: 'Currency' if it's a forex pair
+        str: 'Cryptocurrency' if the symbol is a cryptocurrency
+        str: 'Commodity' if it's a commodity (e.g. gold, oil)
+        str: 'Stock' otherwise.
     """
     commodity_symbols = ['GC=F', 'CL=F', 'SI=F', 'HG=F']  # Gold, Crude Oil, Silver, Copper futures
     
@@ -225,7 +218,9 @@ def get_asset_type(symbol):
     asset = ticker.info.get('quoteType')
 
     if symbol in commodity_symbols:
-        return 'COMMODITY'
+        return 'Commodity'
+    elif symbol == 'ETF':
+        return symbol
     else:
-        return asset
+        return asset.capitalize()
 

@@ -51,13 +51,13 @@ def setup_tasks(bot):
                     title='Weekend Market Report',
                     description='Market is closed on weekends.',
                     color=discord.Color.blue(),
-                    timestamp=dt.datetime.now(),
+                    timestamp=TIME_NOW,
                     )
             else:
                 embed = discord.Embed(
                     title='Market Open Report = 9:30 AM EST',
-                    color=discord.Color.green(),
-                    timestamp=dt.datetime.now(),
+                    color=discord.Color.blue(),
+                    timestamp=TIME_NOW,
                     )
             
             for stock in stock_data:

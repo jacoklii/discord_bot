@@ -28,7 +28,6 @@ async def on_ready():
     global task_dict
 
     for task_name, task in task_dict.items():
-
         if not task.is_running():
             task.start()
             print(f'Started {task_name} task.')
