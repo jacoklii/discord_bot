@@ -154,8 +154,11 @@ def get_symbols(conn, portfolio_id):
     cur.execute('''
                 SELECT DISTINCT symbol FROM transactions
                 WHERE portfolio_id = ?
-                ''', portfolio_id
-                )
+                ''', (portfolio_id,)
+    )
+
+    results = cur.fetchall()
+    return [row[0] for row in results]
 
 def insert_transaction(conn, portfolio_id, symbol, sector, operation, shares, price_per_share, total_price, timestamp):
     """Insert a new transaction into transaction table."""

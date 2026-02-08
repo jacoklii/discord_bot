@@ -311,8 +311,11 @@ def setup_portfolio_commands(bot, conn):
 
             ACTIVATE_TASKS[portfolio_name] = task_funcs
 
-            await ctx.send(f'Portfolio {portfolio_name} registered for periodic reports and alerts.')
-
+            if task_funcs:
+                await ctx.send(f'Portfolio {portfolio_name} registered for periodic reports and alerts.')
+            else:
+                await ctx.send(f'Internal error setting up tasks for portfolio {portfolio_name}.')
+                
         except Exception as e:
             await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}: {e}')
             print(f"Error starting tasks for portfolio '{portfolio_name}': {e}")
