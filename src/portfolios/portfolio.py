@@ -306,8 +306,8 @@ def setup_portfolio_commands(bot, conn):
         
         try:
             task_funcs = setup_portfolio_tasks(bot, conn, portfolio_name)
-            task_funcs['portfolio_market_open_report'].start(portfolio_name)
-            task_funcs['portfolio_changes'].start(portfolio_name)
+            task_funcs['portfolio_market_open_report'].start()
+            task_funcs['portfolio_changes'].start()
 
             ACTIVATE_TASKS[portfolio_name] = task_funcs
 
@@ -316,6 +316,7 @@ def setup_portfolio_commands(bot, conn):
         except Exception as e:
             await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}: {e}')
             print(f"Error starting tasks for portfolio '{portfolio_name}': {e}")
+
 
 def setup_portfolio_tasks(bot, conn, portfolio_name):
     """Setup portfolio-related background tasks."""
