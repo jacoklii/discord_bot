@@ -1,7 +1,21 @@
 from src.config.config import TIME_NOW
 
 def percent_change(current, reference):
-    """Calculate percentage change and compare reference to current value."""
+    """Calculate percentage change only and compare reference price to current value."""
+    try:
+        percentage = float((current - reference) / reference) * 100
+
+        return percentage
+    
+    except ZeroDivisionError:
+        return 0.0
+    
+    except Exception as e:
+        print(f'Error calculating percent change: {e}')
+        return 0.0
+    
+def stock_change(current, reference):
+    """Calculate percentage change and change and compare reference to current value."""
     try:
         change = current - reference
         percentage = float(change / reference) * 100

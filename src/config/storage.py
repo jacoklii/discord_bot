@@ -1,5 +1,5 @@
 import json
-from src.config.config import STOCK_FILE
+from src.config.config import STOCK_FILE, PORTFOLIO_FILE
 
 # --- file management for stocks ---
 def load_stocks():
@@ -30,3 +30,27 @@ def save_stocks(stocks):
         json.dump({'symbols': stocks}, f, indent=2)
 
 STOCK_SYMBOLS = load_stocks()
+
+
+def load_portfolio():
+    """Load portfolio for portfolio specific tasks from a stored file."""
+    try:
+        with open(PORTFOLIO_FILE, 'r') as f:
+            data = json.load(f)
+            portfolio = data.get('registered_portfolio')
+            if isinstance(portfolio, list):
+                return portfolio[0] if portfolio else None
+            return portfolio if portfolio else None
+    except FileNotFoundError:
+        save_portfolio(None)
+        return None
+    
+def save_portfolio(portfolio_name):
+    """
+    Save and register a portfolio name for portfolio tasks.
+    Only one name is stored, otherwise overwrite the existing name.
+    
+    :param portfolio_name: desired portfolio name
+    """
+    with open(PORTFOLIO_FILE, 'w') as f:
+        json.dump({'registered_portfolio': portfolio_name}, f, indent=2)

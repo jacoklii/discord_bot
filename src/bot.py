@@ -3,7 +3,7 @@ from discord.ext import commands
 
 from src.config.config import get_portfolio_connection, discord_token
 from src.portfolios.database.schema import create_database_schema
-from src.portfolios.portfolio import setup_portfolio_commands
+from src.portfolios.portfolio import setup_portfolio_commands, start_portfolio_tasks, load_portfolio
 
 from src.discord.commands import setup_watchlist_commands, setup_chart_commands
 from src.discord.tasks import setup_tasks
@@ -31,6 +31,8 @@ async def on_ready():
         if not task.is_running():
             task.start()
             print(f'Started {task_name} task.')
+            
+    start_portfolio_tasks(bot, portfolio_db)
 
 setup_watchlist_commands(bot)
 setup_chart_commands(bot)

@@ -5,50 +5,7 @@ import itertools
 # Scripts
 from src.config.config import last_checked_prices, sp500_last_checked_prices
 from src.config.storage import STOCK_SYMBOLS
-from src.config.utils import clean_symbol, percent_change
-
-
-def check_price_changes(symbols, percent_threshold=1):
-    """
-    Compare current prices to the last saved checks and return symbols with
-    significant short-term moves.
-
-    The function uses the module-level `last_checked_prices` map to compute
-    percentage change vs the last observed price and updates that map.
-
-    Returns:
-        list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
-    """
-    big_changes = []
-    for symbol in symbols:
-        try:
-            # get the ticker symbols
-            ticker = yf.Ticker(symbol)
-            #get the last price/current price
-            current_price = ticker.fast_info.last_price
-
-            # check if stock symbol is in last checked prices to move on with the function
-            if symbol in last_checked_prices:
-                last_price = last_checked_prices[symbol]
-                percentage_change, change = percent_change(current_price, last_price)
-
-                # checks the pecent change if the absolute value is greater than percent_threshold
-                if abs(percentage_change) >= percent_threshold:
-                    big_changes.append({
-                        'symbol': symbol,
-                        'current_price': current_price,
-                        'last_price': last_price,
-                        'change': change,
-                        'percentage_change': percentage_change,
-                    })
-
-            # checks if price of the stock is equal to current price for storing reference for next comparison
-            last_checked_prices[symbol] = current_price
-
-        except Exception as e:
-            print(f'Error getting data for {symbol}: {e}')
-
-    return big_changes
+from src.config.utils import clean_symbol, percent_change, stock_change
 
 sp500_cycle = None
 def get_sp500_movers(percent_threshold=2, batch_size=25):
@@ -120,22 +77,21 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         return []
 
 
-def get_batch_prices(symbols, price_change=False, compare_to='week'):
+def get_batch_prices(symbols, price_change=False, compare_to='portfolio', portfolio_prices=None):
     """
     batch processing to get stock price data for multiple symbols.
     Use price_change=True to get percent change vs compare_to price.
     
     :param symbols: list of symbols
     :param price_change: bool, whether to compute price change info
-    :param compare_to: 'week' or 'day' for price comparison
+    :param compare_to: 'week' or 'day' or 'portfolio' for price comparison
+    :param portfolio_prices: dict of symbol to price if compare_to='portfolio'
 
     :return: dict of symbol to last close price, or dict with price change info
 
     """
-    tickers = [clean_symbol(sym) for sym in symbols]
-    symbols_str = ' '.join(tickers)
         
-    data = yf.download(symbols_str, period='5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
+    data = yf.download(symbols, period='5d', interval='1d', group_by='ticker', progress=False, auto_adjust=False)
             
     prices = {}
 
@@ -143,6 +99,8 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
         if len(symbols) == 1:
             if isinstance(data.columns, pd.MultiIndex):
                 close_series = data[symbols[0]]['Close']
+                if close_series.empty:
+                    raise ValueError(f"No close price data found for symbol {symbols[0]}")
 
             last_close = close_series.iloc[-1]
 
@@ -151,10 +109,12 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
                     compare_price = close_series.iloc[-2]
                 elif compare_to == 'week':
                     compare_price = close_series.iloc[-5]
+                elif compare_to == 'portfolio':
+                    compare_price = portfolio_prices.get(symbols[0], 0)
                 else:
-                    raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
+                    raise ValueError("Invalid compare_to value. Use 'day' or 'week' or 'portfolio'.")
 
-                percentage_change, change = percent_change(last_close, compare_price)
+                percentage_change, change = stock_change(last_close, compare_price)
 
                 prices[symbols[0]] = {
                     'last_close': float(last_close),
@@ -166,10 +126,12 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
                 prices[symbols[0]] = float(last_close)
 
         else:
-            for symbol in symbols:
+            for i, symbol in enumerate(symbols):
                 if isinstance(data.columns, pd.MultiIndex):
                     close_series = data[symbol]['Close']
-
+                    if close_series.empty:
+                        raise ValueError(f"No close price data found for symbol {symbol}")
+     
                 last_close = close_series.iloc[-1]
 
                 if price_change:
@@ -177,10 +139,14 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
                         compare_price = close_series.iloc[-2]
                     elif compare_to == 'week':
                         compare_price = close_series.iloc[-5]
+                    elif compare_to == 'portfolio':
+                        if portfolio_prices is None or i >= len(portfolio_prices):
+                            raise ValueError(f"Not enough portfolio prices provided for comparison. Expected at least {i+1}, got {len(portfolio_prices)}.")
+                        compare_price = portfolio_prices[i]
                     else:
-                        raise ValueError("Invalid compare_to value. Use 'day' or 'week'.")
-                    
-                    percentage_change, change = percent_change(last_close, compare_price)
+                        raise ValueError("Invalid compare_to value. Use 'day' or 'week' or 'portfolio'.")
+
+                    percentage_change, change = stock_change(last_close, compare_price)
 
                     prices[symbol] = {
                         'last_close': float(last_close),
@@ -195,8 +161,79 @@ def get_batch_prices(symbols, price_change=False, compare_to='week'):
     
     except Exception as e:
         print(f"Error getting close for {symbol}: {e}")
-        return {}
+        return prices
 
+
+def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
+    """
+    Compare current prices to initial or last checked prices and return symbols with
+    significant short-term moves.
+
+    The function compares current prices to provided initial_prices if available.
+    If initial_prices is not provided or doesn't contain a symbol, it falls back to
+    using the module-level `last_checked_prices` map.
+
+    Args:
+        symbols (list): List of stock symbols to check.
+        percent_threshold (float): Minimum absolute percent change to report. Defaults to 1.
+        initial_prices (dict, optional): Dictionary mapping symbols to initial prices for comparison.
+                                         If not provided, uses last_checked_prices. Defaults to None.
+
+    Returns:
+        list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
+    """
+
+    if initial_prices is None:
+        initial_prices = {}
+    
+    big_changes = []
+    
+    try:
+        prices = get_batch_prices(symbols)
+        
+        for i, symbol in enumerate(symbols):
+            try:
+                current_price = prices.get(symbol)
+                if current_price is None:
+                    continue
+
+                if symbol in last_checked_prices:
+                    last_price = last_checked_prices[symbol]
+                else:
+                    last_checked_prices[symbol] = current_price
+                    continue
+
+                
+                # Measure the last checked price percentage th the treshold for detection
+                if abs(percent_change(current_price, last_price)) >= percent_threshold:
+
+                    if isinstance(initial_prices, list) and i < len(initial_prices):
+                        initial_price = initial_prices[i]
+                    elif isinstance(initial_prices, dict) and symbol in initial_prices:
+                        initial_price = initial_prices[symbol]
+                    else: 
+                        initial_price = last_price
+
+                    # Calculate percentage change and change compared to the initial price for affects on investments
+                    percentage_change, change = stock_change(current_price, initial_price)
+
+                    big_changes.append({
+                        'symbol': symbol,
+                        'current_price': current_price,
+                        'initial_price': initial_price,
+                        'change': change,
+                        'percentage_change': percentage_change,
+                    })
+
+                # checks if price of the stock is equal to current price for storing reference for next comparison
+                last_checked_prices[symbol] = current_price
+
+            except Exception as e:
+                print(f'Error processing {symbol}: {e}')
+    except Exception as e:
+        print(f'Error getting data for {symbol}: {e}')
+
+    return big_changes
 
 def get_asset_type(symbol):
     """

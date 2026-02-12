@@ -2,11 +2,12 @@ import discord
 from discord.ext import commands, tasks
 import sqlite3 as sq
 
+from src.config.storage import load_portfolio, save_portfolio
 from src.portfolios.database.procedures import *
 from src.portfolios.portfolio_logic import *
 from src.config.utils import is_market_open, is_weekend
 
-ACTIVATE_TASKS = {}
+ACTIVE_TASKS = {}
 
 def setup_portfolio_commands(bot, conn):
     """Setup portfolio commands."""
@@ -300,7 +301,9 @@ def setup_portfolio_commands(bot, conn):
         if not get_portfolio_id(conn, portfolio_name):
             await ctx.send(f'Portfolio {portfolio_name} not found. Please create the portfolio before registering for tasks.')
             return
-        if portfolio_name in ACTIVATE_TASKS:
+        
+        registered = load_portfolio()
+        if registered == portfolio_name:
             await ctx.send(f'Portfolio {portfolio_name} is already registered for tasks.')
             return
         
@@ -309,7 +312,9 @@ def setup_portfolio_commands(bot, conn):
             task_funcs['portfolio_market_open_report'].start()
             task_funcs['portfolio_changes'].start()
 
-            ACTIVATE_TASKS[portfolio_name] = task_funcs
+            ACTIVE_TASKS[portfolio_name] = task_funcs
+
+            save_portfolio(portfolio_name)
 
             if task_funcs:
                 await ctx.send(f'Portfolio {portfolio_name} registered for periodic reports and alerts.')
@@ -317,7 +322,7 @@ def setup_portfolio_commands(bot, conn):
                 await ctx.send(f'Internal error setting up tasks for portfolio {portfolio_name}.')
 
         except Exception as e:
-            await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}: {e}')
+            await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}.')
             print(f"Error starting tasks for portfolio '{portfolio_name}': {e}")
 
 
@@ -328,7 +333,8 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
     from src.stock_data import check_price_changes
 
     if not portfolio_name:
-            return "No portfolio is registered. Please use '!tasks <portfolio name>' to register a portfolio for reports & alerts.\n"
+        print('No portfolio name provided for task setup.')
+        return None
     
     @tasks.loop(hours=24)
     async def protfolio_market_open_report():
@@ -339,7 +345,6 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         """
 
         await bot.wait_until_ready()
-
         print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
 
         channel = bot.get_channel(CHANNEL_ID)
@@ -348,18 +353,28 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
             return
         
         portfolio_id = get_portfolio_id(conn, portfolio_name)
-        symbols = get_symbols(conn, portfolio_id)
+        holdings = get_symbols(conn, portfolio_id)
+        if not holdings:
+            await channel.send(f'No holdings found for portfolio {portfolio_name}.')
+            return
 
-        prices = get_batch_prices(symbols, price_change=True, compare_to='week' if is_weekend() else 'day')
+        symbols = [row[0] for row in holdings]
+        initial_prices = [row[1] for row in holdings]
+
+        prices = get_batch_prices(symbols, price_change=True, compare_to='portfolio', portfolio_prices=initial_prices)
 
         stock_data = []
         for symbol in symbols:
-            stock_data.append({
-                'symbol': symbol,
-                'current_price': prices[symbol]['last_close'],
-                'percentage_change': prices[symbol]['percentage_change'],
-                'change': prices[symbol]['change']
-            })
+            if symbol in prices:
+                stock_data.append({
+                    'symbol': symbol,
+                    'current_price': prices[symbol]['last_close'],
+                    'percentage_change': prices[symbol]['percentage_change'],
+                    'change': prices[symbol]['change']
+                })
+            else:
+                print(f'WARNING: No price data availablefor {symbol}. Skipping in market open report.')
+                continue
 
         if stock_data:
             if is_weekend():
@@ -406,11 +421,15 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         if not channel:
             print(f'Channel {CHANNEL_ID} not found')
             return
-        
-        portfolio_id = get_portfolio_id(conn, portfolio_name)
-        symbols = get_symbols(conn, portfolio_id)
 
-        big_changes = check_price_changes(symbols, percent_threshold=1)
+        portfolio_id = get_portfolio_id(conn, portfolio_name)
+        holdings = get_symbols(conn, portfolio_id)
+
+        symbols = [row[0] for row in holdings]
+        initial_prices = [row[1] for row in holdings]
+
+        # compare current price to initial investment price
+        big_changes = check_price_changes(symbols, percent_threshold=1, initial_prices=initial_prices)
 
         if big_changes:
             print(f"PORTFOLIO - {portfolio_name}: Big price changes found.")
@@ -433,8 +452,49 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     inline=True
                 )
             await channel.send(embed=embed)
+        else:
+            print(f"PORTFOLIO - {portfolio_name}: Big price changes not found.")
+
 
     return {
         'portfolio_market_open_report': protfolio_market_open_report,
         'portfolio_changes': portfolio_changes
     }
+
+def start_portfolio_tasks(bot, conn):
+    """
+    Start portfolio-related background tasks for the registered portfolio.
+    
+    :param bot: bot connection to start tasks for setup portfolio tasks
+    :param conn: connection to portfolio database to start tasks for setup portfolio tasks
+    """
+
+    registered_portfolio = load_portfolio()
+
+    if not registered_portfolio:
+        print('TASK SETUP: No registered portfolio found to start tasks for.')
+        return
+    try:
+        if get_portfolio_id(conn, registered_portfolio):
+            task_funcs = setup_portfolio_tasks(bot, conn, registered_portfolio)
+
+            if not task_funcs:
+                print(f'TASK SETUP: Failed to set up tasks for portfolio {registered_portfolio}.')
+                return
+            
+            if not task_funcs['portfolio_market_open_report'].is_running():
+                task_funcs['portfolio_market_open_report'].start()
+                print(f'PORTFOLIO TASKS: Started market open report task for portfolio {registered_portfolio}.')
+
+            if not task_funcs['portfolio_changes'].is_running():
+                task_funcs['portfolio_changes'].start()
+                print(f'PORTFOLIO TASKS: Started price change alert task for portfolio {registered_portfolio}.')
+
+
+            ACTIVE_TASKS[registered_portfolio] = task_funcs
+
+            print(f'Tasks started for portfolio: {registered_portfolio}')
+        else:
+            print(f'TASK SETUP: Registered portfolio {registered_portfolio} not found in database. Cannot start tasks.')
+    except Exception as e:
+        print(f'Error starting tasks for portfolio {registered_portfolio}: {e}')

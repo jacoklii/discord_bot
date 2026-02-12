@@ -6,8 +6,8 @@ bot-env
 *.db
 *.sqlite
 
-# Watchlist files
-watchlist.json
+# JSON files
+*.json
 
 # Miscellaneous
 __pycache__
