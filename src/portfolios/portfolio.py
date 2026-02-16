@@ -337,7 +337,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         return None
     
     @tasks.loop(hours=24)
-    async def protfolio_market_open_report():
+    async def portfolio_market_open_report():
         """
         Send a market open report for a specific portfolio.
         
@@ -345,10 +345,11 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         """
 
         await bot.wait_until_ready()
-        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
-
         if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30 or TIME_NOW.minute >=35):
             return
+
+        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
+
 
         channel = bot.get_channel(CHANNEL_ID)
         if not channel:
@@ -371,8 +372,9 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         stock_data = []
         for i, symbol in enumerate(symbols):
             if symbol in prices:
-                current_price = prices[symbol]['last_close']
+                current_price = prices[symbol]
                 current_value = current_price * total_shares[i]
+                value_change = current_value - initial_values[i]
                 percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
 
                 stock_data.append({
@@ -399,12 +401,11 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     timestamp=TIME_NOW
                 )
             for stock in stock_data:
-                change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
-                change_sign = "+" if stock['change'] >= 0 else ""
+                color, sym = ('🟢', '+') if value_change >= 0 else ('🔴', '-')
 
                 embed.add_field(
-                        name=f"{change_emoji} {stock['symbol']}",
-                        value=f"${stock['current_price']:.2f}\nPortfolio Change:{change_sign}{stock['percentage_change']:.2f}%",
+                        name=f"{color} {stock['symbol']}",
+                        value=f"${stock['current_price']:.2f}\nPortfolio Change: {sym}{stock['percentage_change']:.2f}%",
                         inline=True
                 )
             await channel.send(embed=embed)
@@ -454,15 +455,15 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     stock = big_changes[symbol]
                     
                 current_value = stock['current_price'] * total_shares[i]
+                value_change = current_value - initial_values[i]
                 percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
 
-                star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
-                change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
-                change_sign = "+" if stock['change'] >= 0 else ""
+                star = '⭐️' if abs(percentage_change) >= 2 else ''
+                color, sym = ('🟢', '+') if value_change >= 0 else ('🔴', '-')
 
                 embed.add_field(
-                    name=f"{star} {change_emoji} {stock['symbol']}",
-                    value=f"${stock['current_price']:.2f}\nPortfolio Change: {change_sign}{percentage_change:.2f}%", 
+                    name=f"{star} {color} {stock['symbol']}",
+                    value=f"${stock['current_price']:.2f}\nPortfolio Change: {sym}{percentage_change:.2f}%", 
                     inline=True
                 )
             await channel.send(embed=embed)
@@ -471,7 +472,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
 
 
     return {
-        'portfolio_market_open_report': protfolio_market_open_report,
+        'portfolio_market_open_report': portfolio_market_open_report,
         'portfolio_changes': portfolio_changes
     }
 

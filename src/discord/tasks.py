@@ -36,11 +36,11 @@ def setup_tasks(bot):
         prices = get_batch_prices(STOCK_SYMBOLS, price_change=True, compare_to='day')
 
         stock_data = []
-        for i, symbol in enumerate(STOCK_SYMBOLS):
-            if symbol[i] in prices and isinstance(prices[symbol], dict):
+        for symbol in STOCK_SYMBOLS:
+            if symbol in prices and isinstance(prices[symbol], dict):
                 
                 stock_data.append({
-                    'symbol': symbol[i],
+                    'symbol': symbol,
                     'current_price': prices[symbol]['last_close'],
                     'percentage_change': prices[symbol]['percentage_change'],
                     'change': prices[symbol]['change']
