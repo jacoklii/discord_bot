@@ -152,8 +152,9 @@ def get_symbols(conn, portfolio_id):
     """Get a list of all symbols in a portfolio."""
     cur = conn.cursor()
     cur.execute('''
-                SELECT DISTINCT symbol, price_per_share FROM transactions
+                SELECT symbol, price_per_share FROM transactions
                 WHERE portfolio_id = ?
+                GROUP BY symbol
                 ''', (portfolio_id,)
     )
 

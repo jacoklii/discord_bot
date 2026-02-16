@@ -347,30 +347,38 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         await bot.wait_until_ready()
         print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
 
+        if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30 or TIME_NOW.minute >=35):
+            return
+
         channel = bot.get_channel(CHANNEL_ID)
         if not channel:
             print(f'Channel {CHANNEL_ID} not found')
             return
         
         portfolio_id = get_portfolio_id(conn, portfolio_name)
-        holdings = get_symbols(conn, portfolio_id)
+        holdings = get_holdings(conn, portfolio_id)
+
         if not holdings:
             await channel.send(f'No holdings found for portfolio {portfolio_name}.')
             return
 
         symbols = [row[0] for row in holdings]
-        initial_prices = [row[1] for row in holdings]
+        total_shares = [row[2] for row in holdings]
+        initial_values = [row[3] for row in holdings]
 
-        prices = get_batch_prices(symbols, price_change=True, compare_to='portfolio', portfolio_prices=initial_prices)
+        prices = get_batch_prices(symbols, price_change=False)
 
         stock_data = []
-        for symbol in symbols:
+        for i, symbol in enumerate(symbols):
             if symbol in prices:
+                current_price = prices[symbol]['last_close']
+                current_value = current_price * total_shares[i]
+                percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
+
                 stock_data.append({
                     'symbol': symbol,
-                    'current_price': prices[symbol]['last_close'],
-                    'percentage_change': prices[symbol]['percentage_change'],
-                    'change': prices[symbol]['change']
+                    'current_price': current_price,
+                    'percentage_change': percentage_change,
                 })
             else:
                 print(f'WARNING: No price data availablefor {symbol}. Skipping in market open report.')
@@ -396,7 +404,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
 
                 embed.add_field(
                         name=f"{change_emoji} {stock['symbol']}",
-                        value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%",
+                        value=f"${stock['current_price']:.2f}\nPortfolio Change:{change_sign}{stock['percentage_change']:.2f}%",
                         inline=True
                 )
             await channel.send(embed=embed)
@@ -423,32 +431,38 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
             return
 
         portfolio_id = get_portfolio_id(conn, portfolio_name)
-        holdings = get_symbols(conn, portfolio_id)
+        holdings = get_holdings(conn, portfolio_id)
 
         symbols = [row[0] for row in holdings]
-        initial_prices = [row[1] for row in holdings]
+        total_shares = [row[2] for row in holdings]
+        initial_values = [row[3] for row in holdings]
 
-        # compare current price to initial investment price
-        big_changes = check_price_changes(symbols, percent_threshold=1, initial_prices=initial_prices)
+        # compare current price to last checked price for the stock to detect significant changes since last check
+        big_changes = check_price_changes(symbols, percent_threshold=1, initial_prices=None)
 
         if big_changes:
             print(f"PORTFOLIO - {portfolio_name}: Big price changes found.")
 
-            symbols = ', '.join(stock['symbol'] for stock in big_changes)
             embed = discord.Embed(
-                title=f"ALERT: Big Price Movement for {symbols} in Portfolio {portfolio_name}",
+                title=f"ALERT: Big Price Movement for {''.join(symbols)} in Portfolio {portfolio_name}",
                 color=discord.Color.red(),
                 timestamp=TIME_NOW,
                 )
 
-            for stock in big_changes:
+            for i, symbol in enumerate(symbols):
+                if symbol in big_changes:
+                    stock = big_changes[symbol]
+                    
+                current_value = stock['current_price'] * total_shares[i]
+                percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
+
                 star = '⭐️' if abs(stock['percentage_change']) >= 2 else ''
                 change_emoji = '🟢' if stock['change'] >= 0 else '🔴'
                 change_sign = "+" if stock['change'] >= 0 else ""
 
                 embed.add_field(
                     name=f"{star} {change_emoji} {stock['symbol']}",
-                    value=f"${stock['current_price']:.2f}\n{change_sign}{stock['percentage_change']:.2f}%", 
+                    value=f"${stock['current_price']:.2f}\nPortfolio Change: {change_sign}{percentage_change:.2f}%", 
                     inline=True
                 )
             await channel.send(embed=embed)

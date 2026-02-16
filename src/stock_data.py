@@ -77,7 +77,7 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         return []
 
 
-def get_batch_prices(symbols, price_change=False, compare_to='portfolio', portfolio_prices=None):
+def get_batch_prices(symbols, price_change=False, compare_to='custom', custom_prices=None):
     """
     batch processing to get stock price data for multiple symbols.
     Use price_change=True to get percent change vs compare_to price.
@@ -139,13 +139,12 @@ def get_batch_prices(symbols, price_change=False, compare_to='portfolio', portfo
                         compare_price = close_series.iloc[-2]
                     elif compare_to == 'week':
                         compare_price = close_series.iloc[-5]
-                    elif compare_to == 'portfolio':
-                        if portfolio_prices is None or i >= len(portfolio_prices):
-                            raise ValueError(f"Not enough portfolio prices provided for comparison. Expected at least {i+1}, got {len(portfolio_prices)}.")
-                        compare_price = portfolio_prices[i]
+                    elif compare_to == 'custom':
+                        if custom_prices is None or i >= len(custom_prices):
+                            raise ValueError(f"Not enough custom prices provided for comparison. Expected at least {i+1}, got {len(custom_prices)}.")
+                        compare_price = custom_prices[i]
                     else:
-                        raise ValueError("Invalid compare_to value. Use 'day' or 'week' or 'portfolio'.")
-
+                        raise ValueError("Invalid compare_to value. Use 'day' or 'week' or 'custom'.")
                     percentage_change, change = stock_change(last_close, compare_price)
 
                     prices[symbol] = {
@@ -182,14 +181,11 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
     Returns:
         list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
     """
-
-    if initial_prices is None:
-        initial_prices = {}
     
     big_changes = []
     
     try:
-        prices = get_batch_prices(symbols)
+        prices = get_batch_prices(symbols, price_change=False)
         
         for i, symbol in enumerate(symbols):
             try:
@@ -203,8 +199,7 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
                     last_checked_prices[symbol] = current_price
                     continue
 
-                
-                # Measure the last checked price percentage th the treshold for detection
+                # Measure the last checked price percentage change against the threshold for detection
                 if abs(percent_change(current_price, last_price)) >= percent_threshold:
 
                     if isinstance(initial_prices, list) and i < len(initial_prices):
@@ -212,20 +207,20 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
                     elif isinstance(initial_prices, dict) and symbol in initial_prices:
                         initial_price = initial_prices[symbol]
                     else: 
-                        initial_price = last_price
+                        initial_price = None
 
                     # Calculate percentage change and change compared to the initial price for affects on investments
                     percentage_change, change = stock_change(current_price, initial_price)
 
-                    big_changes.append({
+                    big_changes[symbol] = {
                         'symbol': symbol,
                         'current_price': current_price,
                         'initial_price': initial_price,
                         'change': change,
-                        'percentage_change': percentage_change,
-                    })
+                        'percentage_change': percentage_change
+                    }
 
-                # checks if price of the stock is equal to current price for storing reference for next comparison
+                # Update last checked price for next comparison
                 last_checked_prices[symbol] = current_price
 
             except Exception as e:
