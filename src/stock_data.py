@@ -76,7 +76,6 @@ def get_sp500_movers(percent_threshold=2, batch_size=25):
         print(f'Error checking S&P 500: {e}')  
         return []
 
-
 def get_batch_prices(symbols, price_change=False, compare_to='custom', custom_prices=None):
     """
     batch processing to get stock price data for multiple symbols.
@@ -162,7 +161,6 @@ def get_batch_prices(symbols, price_change=False, compare_to='custom', custom_pr
         print(f"Error getting close for {symbol}: {e}")
         return prices
 
-
 def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
     """
     Compare current prices to initial or last checked prices and return symbols with
@@ -182,7 +180,7 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
         list[dict]: Each dict contains 'symbol', 'current_price', 'last_price', and 'percentage_change'.
     """
     
-    big_changes = []
+    big_changes = {}
     
     try:
         prices = get_batch_prices(symbols, price_change=False)
@@ -196,8 +194,11 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
                 if symbol in last_checked_prices:
                     last_price = last_checked_prices[symbol]
                 else:
+                    last_price = current_price
                     last_checked_prices[symbol] = current_price
                     continue
+
+                last_checked_prices[symbol] = current_price
 
                 # Measure the last checked price percentage change against the threshold for detection
                 if abs(percent_change(current_price, last_price)) >= percent_threshold:
@@ -209,19 +210,15 @@ def check_price_changes(symbols, percent_threshold=1, initial_prices=None):
                     else: 
                         initial_price = None
 
-                    # Calculate percentage change and change compared to the initial price for affects on investments
                     percentage_change, change = stock_change(current_price, initial_price)
 
-                    big_changes[symbol] = {
+                    big_changes[symbol] = {   
                         'symbol': symbol,
                         'current_price': current_price,
                         'initial_price': initial_price,
                         'change': change,
                         'percentage_change': percentage_change
                     }
-
-                # Update last checked price for next comparison
-                last_checked_prices[symbol] = current_price
 
             except Exception as e:
                 print(f'Error processing {symbol}: {e}')

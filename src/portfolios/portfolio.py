@@ -5,7 +5,8 @@ import sqlite3 as sq
 from src.config.storage import load_portfolio, save_portfolio
 from src.portfolios.database.procedures import *
 from src.portfolios.portfolio_logic import *
-from src.config.utils import is_market_open, is_weekend
+from src.config.utils import is_market_open, is_weekend, stock_changes
+from src.news import embed_format, get_news_update
 
 ACTIVE_TASKS = {}
 
@@ -329,8 +330,9 @@ def setup_portfolio_commands(bot, conn):
 def setup_portfolio_tasks(bot, conn, portfolio_name):
     """Setup portfolio-related background tasks."""
     
-    from src.config.config import CHANNEL_ID, TIME_NOW
-    from src.stock_data import check_price_changes
+    from src.config.config import CHANNEL_ID, TIMEZONE
+    from src.stock_data import check_price_changes, get_batch_prices
+    from datetime import datetime as dt
 
     if not portfolio_name:
         print('No portfolio name provided for task setup.')
@@ -345,11 +347,13 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         """
 
         await bot.wait_until_ready()
-        if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30 or TIME_NOW.minute >=35):
+
+        time_now = dt.now(TIMEZONE)
+        
+        if time_now.hour != 9 or (time_now.hour == 9 and (time_now.minute < 30 and time_now.minute >=40)):
             return
 
-        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Sending market open report...")
-
+        print(f"[{time_now}] PORTFOLIO - {portfolio_name}: Sending market open report...")
 
         channel = bot.get_channel(CHANNEL_ID)
         if not channel:
@@ -374,7 +378,6 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
             if symbol in prices:
                 current_price = prices[symbol]
                 current_value = current_price * total_shares[i]
-                value_change = current_value - initial_values[i]
                 percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
 
                 stock_data.append({
@@ -383,7 +386,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     'percentage_change': percentage_change,
                 })
             else:
-                print(f'WARNING: No price data availablefor {symbol}. Skipping in market open report.')
+                print(f'WARNING: No price data available for {symbol}. Skipping in market open report.')
                 continue
 
         if stock_data:
@@ -392,20 +395,21 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     title=f'PORTFOLIO - {portfolio_name} Weekend Market Report',
                     description='Market is closed on weekends.',
                     color=discord.Color.green(),
-                    timestamp=TIME_NOW
+                    timestamp=time_now
                 )
             else: 
                 embed = discord.Embed(
                     title=f'PORTFOLIO - {portfolio_name} Market Open Report',
                     color=discord.Color.green(),
-                    timestamp=TIME_NOW
+                    timestamp=time_now
                 )
             for stock in stock_data:
-                color, sym = ('🟢', '+') if value_change >= 0 else ('🔴', '-')
+                star, emoji, sign = stock_changes(percentage_change)
+
 
                 embed.add_field(
-                        name=f"{color} {stock['symbol']}",
-                        value=f"${stock['current_price']:.2f}\nPortfolio Change: {sym}{stock['percentage_change']:.2f}%",
+                        name=f"{star}{emoji} {stock['symbol']}",
+                        value=f"${stock['current_price']:.2f}\nPortfolio Change: {sign}{stock['percentage_change']:.2f}%",
                         inline=True
                 )
             await channel.send(embed=embed)
@@ -416,15 +420,18 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
     async def portfolio_changes():
         """ 
         Detect large price changes for stocks in portfolios and send alerts to discord channel. 
+        Includes a 5-minute check, 1 hour check, and daily check for significant price changes to capture after-hours movements.
         """
         await bot.wait_until_ready()
+
+        time_now = dt.now(TIMEZONE)
         
-        if TIME_NOW.weekday() >= 5:
+        if time_now.weekday() >= 5:
             return
-        if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30) or TIME_NOW.hour > 16:
+        if time_now.hour < 9 or (time_now.hour == 9 and time_now.minute < 30) or time_now.hour > 16:
             return
 
-        print(f"[{TIME_NOW}] PORTFOLIO - {portfolio_name}: Checking for big changes...")
+        print(f"[{time_now}] PORTFOLIO - {portfolio_name}: Checking for big changes...")
 
         channel = bot.get_channel(CHANNEL_ID)
         if not channel:
@@ -438,6 +445,14 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         total_shares = [row[2] for row in holdings]
         initial_values = [row[3] for row in holdings]
 
+        # Initialize price tracking with initial prices per share for new symbols
+        from src.stock_data import last_checked_prices
+        
+        for i, symbol in enumerate(symbols):
+            if symbol not in last_checked_prices:
+                initial_price_per_share = initial_values[i] / total_shares[i] if total_shares[i] > 0 else 0
+                last_checked_prices[symbol] = initial_price_per_share
+
         # compare current price to last checked price for the stock to detect significant changes since last check
         big_changes = check_price_changes(symbols, percent_threshold=1, initial_prices=None)
 
@@ -445,35 +460,98 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
             print(f"PORTFOLIO - {portfolio_name}: Big price changes found.")
 
             embed = discord.Embed(
-                title=f"ALERT: Big Price Movement for {''.join(symbols)} in Portfolio {portfolio_name}",
+                title=f"ALERT: Big Price Movement for {''.join(big_changes.keys())} in Portfolio {portfolio_name}",
                 color=discord.Color.red(),
-                timestamp=TIME_NOW,
+                timestamp=time_now,
                 )
-
+            
             for i, symbol in enumerate(symbols):
                 if symbol in big_changes:
                     stock = big_changes[symbol]
                     
-                current_value = stock['current_price'] * total_shares[i]
-                value_change = current_value - initial_values[i]
-                percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
+                    current_value = stock['current_price'] * total_shares[i]
+                    percentage_change = (current_value - initial_values[i]) / initial_values[i] * 100 if initial_values[i] != 0 else 0
 
-                star = '⭐️' if abs(percentage_change) >= 2 else ''
-                color, sym = ('🟢', '+') if value_change >= 0 else ('🔴', '-')
+                    star, emoji, sign = stock_changes(percentage_change)
 
-                embed.add_field(
-                    name=f"{star} {color} {stock['symbol']}",
-                    value=f"${stock['current_price']:.2f}\nPortfolio Change: {sym}{percentage_change:.2f}%", 
-                    inline=True
-                )
+                    embed.add_field(
+                        name=f"{star} {emoji} {stock['symbol']}",
+                        value=f"${stock['current_price']:.2f}\nPortfolio Change: {sign}{percentage_change:.2f}%", 
+                        inline=True
+                    )
             await channel.send(embed=embed)
         else:
             print(f"PORTFOLIO - {portfolio_name}: Big price changes not found.")
 
+    @tasks.loop(hours=4)
+    async def portfolio_news():
+        """
+        Check for news related to stocks in the portfolio and send updates to discord channel.
+        Runs every 4 hours before 8pm EST.
+        """
+        await bot.wait_until_ready()
+
+        time_now = dt.now(TIMEZONE)
+        
+        # Only run before 8pm EST (20:00)
+        if time_now.hour >= 20:
+            return
+        
+        # Skip on weekends
+        if time_now.weekday() >= 5:
+            return
+
+        print(f"[{time_now}] PORTFOLIO - {portfolio_name}: Checking for news...")
+
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel:
+            print(f'Channel {CHANNEL_ID} not found')
+            return
+
+        portfolio_id = get_portfolio_id(conn, portfolio_name)
+        holdings = get_holdings(conn, portfolio_id)
+
+        if not holdings:
+            print(f'No holdings found for portfolio {portfolio_name}.')
+            return
+
+        symbols = [row[0] for row in holdings]
+
+        embed = discord.Embed(
+            title=f'📰 News Update: {', '.join(symbols)}',
+            color=discord.Color.blue(),
+            timestamp=time_now
+        )
+        for symbol in symbols:
+            try:
+                news_article = get_news_update(symbol, query='')
+                
+                if not news_article:
+                    continue
+
+                # Limit to top article
+                news_article = news_article[:1]
+                
+                embed_articles = embed_format(news_article)
+                    
+                for article in embed_articles:
+                    embed.add_field(
+                        name=article['title'],
+                        value=article['description'],
+                        inline=False
+                    )
+                
+                embed.set_footer(text=f'Portfolio: {portfolio_name}')
+                await channel.send(embed=embed)
+
+            except Exception as e:
+                print(f'Error fetching news for {symbol}: {e}')
+                continue
 
     return {
         'portfolio_market_open_report': portfolio_market_open_report,
-        'portfolio_changes': portfolio_changes
+        'portfolio_changes': portfolio_changes,
+        'portfolio_news': portfolio_news
     }
 
 def start_portfolio_tasks(bot, conn):
@@ -504,6 +582,10 @@ def start_portfolio_tasks(bot, conn):
             if not task_funcs['portfolio_changes'].is_running():
                 task_funcs['portfolio_changes'].start()
                 print(f'PORTFOLIO TASKS: Started price change alert task for portfolio {registered_portfolio}.')
+
+            if not task_funcs['portfolio_news'].is_running():
+                task_funcs['portfolio_news'].start()
+                print(f'PORTFOLIO TASKS: Started news update task for portfolio {registered_portfolio}.')
 
 
             ACTIVE_TASKS[registered_portfolio] = task_funcs

@@ -77,3 +77,10 @@ def is_market_open(symbol, after_hours=False) -> bool:
         friday_after_5pm = weekday == 4 and hour >= 17
 
         return not (sunday_before_5pm or friday_after_5pm)
+
+def stock_changes(percentage_change):
+    star = '⭐️' if abs(percentage_change) >= 2 else ''
+    emoji = '🟢' if percentage_change >= 0 else '🔴'
+    sign = "+" if percentage_change >= 0 else ""
+
+    return star, emoji, sign

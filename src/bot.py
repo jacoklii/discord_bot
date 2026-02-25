@@ -1,9 +1,10 @@
 import discord
 from discord.ext import commands
 
-from src.config.config import get_portfolio_connection, discord_token
+from src.config.config import discord_token
+from src.portfolios.database.connection import get_portfolio_connection
 from src.portfolios.database.schema import create_database_schema
-from src.portfolios.portfolio import setup_portfolio_commands, start_portfolio_tasks, load_portfolio
+from src.portfolios.portfolio import setup_portfolio_commands, start_portfolio_tasks
 
 from src.discord.commands import setup_watchlist_commands, setup_chart_commands
 from src.discord.tasks import setup_tasks
