@@ -1,20 +1,19 @@
 import discord
 from discord.ext import tasks
 
-from src.config.config import TIMEZONE, TIME_NOW, CHANNEL_ID
+from src.config.config import TIME_NOW, CHANNEL_ID
 from src.config.storage import STOCK_SYMBOLS
 import datetime as dt
 from datetime import datetime
 import asyncio
-from functools import partial
 
 from src.config.utils import is_weekend, stock_changes
 from src.stock_data import check_price_changes
 
-def setup_watchlist_tasks():
+def setup_watchlist_tasks(bot):
 
     @tasks.loop(minutes=5)
-    async def watchlist_changes(bot):
+    async def watchlist_changes():
         """
         Periodic task that runs every five minutes during market hours to check
         the watchlist for large price movements and post alerts to the channel.
@@ -22,7 +21,7 @@ def setup_watchlist_tasks():
 
         await bot.wait_until_ready()
 
-        if TIME_NOW.weekday() >= 5:
+        if is_weekend():
             return
         if TIME_NOW.hour < 9 or (TIME_NOW.hour == 9 and TIME_NOW.minute < 30) or TIME_NOW.hour > 16:
             return

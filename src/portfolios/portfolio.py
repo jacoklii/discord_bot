@@ -326,7 +326,6 @@ def setup_portfolio_commands(bot, conn):
             await ctx.send(f'Error setting up tasks for portfolio {portfolio_name}.')
             print(f"Error starting tasks for portfolio '{portfolio_name}': {e}")
 
-
 def setup_portfolio_tasks(bot, conn, portfolio_name):
     """Setup portfolio-related background tasks."""
     
@@ -460,7 +459,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
             print(f"PORTFOLIO - {portfolio_name}: Big price changes found.")
 
             embed = discord.Embed(
-                title=f"ALERT: Big Price Movement for {''.join(big_changes.keys())} in Portfolio {portfolio_name}",
+                title=f"ALERT: Big Price Movement for {', '.join(big_changes.keys())} in Portfolio {portfolio_name}",
                 color=discord.Color.red(),
                 timestamp=time_now,
                 )
@@ -483,11 +482,11 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         else:
             print(f"PORTFOLIO - {portfolio_name}: Big price changes not found.")
 
-    @tasks.loop(hours=4)
+    @tasks.loop(hours=6)
     async def portfolio_news():
         """
         Check for news related to stocks in the portfolio and send updates to discord channel.
-        Runs every 4 hours before 8pm EST.
+        Runs every 6 hours before 8pm EST.
         """
         await bot.wait_until_ready()
 
@@ -518,7 +517,7 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
         symbols = [row[0] for row in holdings]
 
         embed = discord.Embed(
-            title=f'📰 News Update: {', '.join(symbols)}',
+            title=f'{time_now.hour}:{time_now.minute} {'AM' if time_now.hour < 12 else 'PM'} - News Update: {', '.join(symbols)}',
             color=discord.Color.blue(),
             timestamp=time_now
         )
@@ -542,11 +541,12 @@ def setup_portfolio_tasks(bot, conn, portfolio_name):
                     )
                 
                 embed.set_footer(text=f'Portfolio: {portfolio_name}')
-                await channel.send(embed=embed)
 
             except Exception as e:
                 print(f'Error fetching news for {symbol}: {e}')
                 continue
+
+        await channel.send(embed=embed)
 
     return {
         'portfolio_market_open_report': portfolio_market_open_report,

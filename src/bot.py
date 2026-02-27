@@ -7,7 +7,7 @@ from src.portfolios.database.schema import create_database_schema
 from src.portfolios.portfolio import setup_portfolio_commands, start_portfolio_tasks
 
 from src.discord.commands import setup_watchlist_commands, setup_chart_commands
-from src.discord.tasks import setup_tasks
+from src.discord.tasks import setup_watchlist_tasks
 
 
 intents = discord.Intents.default()
@@ -42,7 +42,7 @@ portfolio_db = get_portfolio_connection()
 create_database_schema(portfolio_db)
 setup_portfolio_commands(bot, portfolio_db)
 
-task_dict = setup_tasks(bot)
+task_dict = setup_watchlist_tasks(bot)
 
 @bot.event
 async def on_close():
