@@ -1,6 +1,6 @@
-# environment variables
+# Environment Variables
 bot-env
-.env
+*.env
 
 # Database files
 *.db
@@ -10,5 +10,13 @@ bot-env
 *.json
 
 # Miscellaneous
-__pycache__
+Discord_bot/__pycache__
+__pycache__/
 __init__.py
+*.log
+*.bak
+*.tmp
+*.swp
+.DS_Store
+.idea/
+.vscode/
